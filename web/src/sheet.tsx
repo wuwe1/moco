@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Conn, State } from './conn'
 import { debugLines, dlog, onDebug } from './debug'
-import { ArrowUp, Keyboard, KeyboardOff } from 'lucide-react'
+import { ArrowUp, FolderGit2, Keyboard, KeyboardOff } from 'lucide-react'
 import { KEYS, keyboard } from './keyboard'
 import { Lightbox, type Picture } from './lightbox'
 import { shrinkImage } from './shrink'
 import { connOf, getOrCreateSession, useRerenderOnSessionChange, type Session } from './session'
 import type { Host } from './store'
+
+const RepoView = lazy(() => import('./repo/RepoView'))
 
 const KEYBOARD_MIN_PX = 80
 const CLOSE_DRAG_PX = 120
@@ -36,6 +38,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	const [drag, setDrag] = useState(0)
 	const [debug, setDebug] = useState(false)
 	const [picture, setPicture] = useState<Picture>()
+	const [repoOpen, setRepoOpen] = useState(false)
 	const [pasting, setPasting] = useState(false)
 	const [typing, setTyping] = useState(false)
 	const [toast, setToast] = useState<string>()
@@ -77,6 +80,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	useEffect(() => {
 		const prev = current.current
 		if (prev && prev.host.id !== host?.id) prev.detach()
+		setRepoOpen(false)
 		if (!host) {
 			kb.current?.blur()
 			current.current = undefined
@@ -120,6 +124,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 
 	const grab = useRef({ y: 0, t: 0, active: false, onStatus: false })
 	const down = (e: ReactPointerEvent) => {
+		if ((e.target as HTMLElement).closest('button')) return
 		grab.current = { y: e.clientY, t: e.timeStamp, active: true, onStatus: !!(e.target as HTMLElement).closest('.status') }
 		;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
 	}
@@ -160,6 +165,16 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 				<span className="dot" data-state={state} />
 				<span className="title">{host?.name}</span>
 				<span className="status">{status(state, conn)}</span>
+				<button
+					className="repo"
+					aria-label="仓库"
+					onClick={() => {
+						kb.current?.blur()
+						setRepoOpen(true)
+					}}
+				>
+					<FolderGit2 size={18} />
+				</button>
 			</header>
 			<div id="panes" ref={sessionMount} />
 			{debug && (
@@ -219,6 +234,11 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 					}}
 				/>
 			</div>
+			{repoOpen && conn && host && (
+				<Suspense fallback={null}>
+					<RepoView conn={conn} hostId={host.id} onClose={() => setRepoOpen(false)} />
+				</Suspense>
+			)}
 			{picture && <Lightbox img={picture} onClose={() => setPicture(undefined)} />}
 		</div>
 	)

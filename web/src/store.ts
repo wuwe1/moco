@@ -100,3 +100,7 @@ export const setTermPrefs = (p: TermPrefs) => localStorage.setItem(TERM_PREFS, J
 export type CustomFont = { id: string; name: string }
 export const customFontList = (): CustomFont[] => readJSON<CustomFont[]>(CUSTOM_FONTS, []).filter(f => f && typeof f.id === 'string' && typeof f.name === 'string')
 export const saveCustomFontList = (list: CustomFont[]) => localStorage.setItem(CUSTOM_FONTS, JSON.stringify(list))
+
+const repoKey = (hostId: string) => `moco.repo.${hostId}`
+export const repoFor = (hostId: string) => localStorage.getItem(repoKey(hostId)) ?? undefined
+export const setRepoFor = (hostId: string, path: string) => localStorage.setItem(repoKey(hostId), path)

@@ -1,0 +1,44 @@
+/* @git-diff-view 自带的是 GitHub 配色：改成从当前主题算 */
+.repo-view .diff-tailwindcss-wrapper[data-theme] .diff-style-root {
+	--diff-border--: var(--line);
+	--diff-plain-content--: var(--term);
+	--diff-plain-lineNumber--: var(--term);
+	--diff-plain-lineNumber-color--: var(--dim);
+	--diff-expand-content--: var(--surface);
+	--diff-expand-lineNumber--: var(--surface);
+	--diff-expand-lineNumber-color--: var(--dim);
+	--diff-empty-content--: var(--surface);
+	--diff-add-content--: color-mix(in srgb, var(--ok) 14%, var(--term));
+	--diff-add-lineNumber--: color-mix(in srgb, var(--ok) 24%, var(--term));
+	--diff-add-content-highlight--: color-mix(in srgb, var(--ok) 34%, var(--term));
+	--diff-del-content--: color-mix(in srgb, var(--down) 14%, var(--term));
+	--diff-del-lineNumber--: color-mix(in srgb, var(--down) 24%, var(--term));
+	--diff-del-content-highlight--: color-mix(in srgb, var(--down) 34%, var(--term));
+	--diff-hunk-content--: color-mix(in srgb, var(--fg) 7%, var(--term));
+	--diff-hunk-lineNumber--: color-mix(in srgb, var(--fg) 12%, var(--term));
+	--diff-hunk-content-color--: var(--dim);
+}
+.repo-view .diff-tailwindcss-wrapper[data-theme] [data-state] { color: var(--fg); }
+
+.repo-view .code pre {
+	margin: 0;
+	padding: 8px 0;
+	background: var(--term) !important;
+	font: 12px/1.5 var(--mono);
+	counter-reset: line;
+}
+.repo-view .code .line::before {
+	counter-increment: line;
+	content: counter(line);
+	display: inline-block;
+	width: 3.5em;
+	margin-right: 1em;
+	padding-right: .5em;
+	text-align: right;
+	color: var(--dim);
+	opacity: .7;
+}
+
+/* 整页是 touch-action: none、不许选字：这里要能上下左右滑，代码能长按选中复制 */
+.repo-view .scroll { overflow: auto; touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
+.repo-view .selectable { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }

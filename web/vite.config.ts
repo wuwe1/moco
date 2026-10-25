@@ -6,7 +6,12 @@ const mocod = 'http://127.0.0.1:7681'
 
 export default defineConfig({
 	plugins: [react(), tailwindcss()],
-	resolve: { alias: { '@': new URL('./src', import.meta.url).pathname } },
+	resolve: {
+		alias: {
+			'@': new URL('./src', import.meta.url).pathname,
+			'@git-diff-view/lowlight': new URL('./src/repo/lowlight-stub.ts', import.meta.url).pathname,
+		},
+	},
 	build: { target: 'safari16' },
 	server: {
 		host: '127.0.0.1',

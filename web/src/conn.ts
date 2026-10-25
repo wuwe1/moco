@@ -21,12 +21,15 @@ const PLACEMENTS = 5
 const FORGET = 6
 const LOG = 7
 const UPLOAD = 8
+const REQUEST = 9
+const REQUEST_TIMEOUT = 20_000
 
 type ServerMsg =
 	| { type: 'challenge'; nonce: string; name: string }
 	| { type: 'ready'; name: string }
 	| { type: 'exit'; code: number }
 	| { type: 'uploaded'; id: number; path?: string; error?: string }
+	| { type: 'reply'; id: number; data?: unknown; error?: string }
 
 const parseFrame = (buf: Uint8Array) => {
 	const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
@@ -59,6 +62,8 @@ export class Conn {
 	private unlog = () => {}
 	private uploadSeq = 0
 	private uploads = new Map<number, { resolve: (path: string) => void; reject: (e: Error) => void }>()
+	private requestSeq = 0
+	private requests = new Map<number, { resolve: (data: unknown) => void; reject: (e: Error) => void }>()
 
 	constructor(
 		private host: Host,
@@ -140,6 +145,11 @@ export class Conn {
 				this.uploads.delete(msg.id)
 				if (msg.path) u?.resolve(msg.path)
 				else u?.reject(new Error(msg.error ?? '没有路径'))
+			} else if (msg.type === 'reply') {
+				const r = this.requests.get(msg.id)
+				this.requests.delete(msg.id)
+				if (msg.error) r?.reject(new Error(msg.error))
+				else r?.resolve(msg.data)
 			} else if (msg.type === 'ready') {
 				this.tries = 0
 				this.retries = 0
@@ -157,8 +167,10 @@ export class Conn {
 			dlog(`WebSocket 关闭 code=${e.code} reason=${e.reason || '无'} clean=${e.wasClean}${this.ws !== ws ? '（旧连接，忽略）' : ''}`)
 			if (this.ws !== ws) return
 			this.unlog()
-			this.uploads.forEach(u => u.reject(new Error('连接断了')))
-			this.uploads.clear()
+			for (const pending of [this.uploads, this.requests]) {
+				pending.forEach(p => p.reject(new Error('连接断了')))
+				pending.clear()
+			}
 			this.lastClose = e.reason ? `${e.code} ${e.reason}` : String(e.code)
 			this.retries++
 			if (e.code === UNAUTHORIZED) return this.set('unauthorized')
@@ -227,6 +239,18 @@ export class Conn {
 		out.set(data, 5)
 		this.ws.send(out)
 		return new Promise((resolve, reject) => this.uploads.set(id, { resolve, reject }))
+	}
+
+	request<T>(op: string, params: Record<string, unknown> = {}): Promise<T> {
+		if (this.state !== 'open' || !this.ws) return Promise.reject(new Error('还没连上'))
+		const id = ++this.requestSeq
+		this.ws.send(frame(REQUEST, JSON.stringify({ id, op, ...params })))
+		return new Promise((resolve, reject) => {
+			this.requests.set(id, { resolve: resolve as (data: unknown) => void, reject })
+			setTimeout(() => {
+				if (this.requests.delete(id)) reject(new Error(`mocod ${REQUEST_TIMEOUT / 1000} 秒没回答（旧版 mocod 不认这个请求，更新一下）`))
+			}, REQUEST_TIMEOUT)
+		})
 	}
 
 	resize(cols: number, rows: number) {

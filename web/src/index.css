@@ -45,10 +45,15 @@
 	--color-input: var(--input);
 	--color-ring: var(--ring);
 	--color-ok: var(--ok);
+	--color-wait: var(--wait);
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);
 	--radius-xl: calc(var(--radius) + 4px);
 	--font-sans: -apple-system, system-ui, sans-serif;
 	--font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+@layer base {
+	* { border-color: var(--border); }
 }
