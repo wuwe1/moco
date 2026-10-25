@@ -15,6 +15,9 @@ const DELAYS = [300, 1000, 2000, 4000]
 const HANDSHAKE_TIMEOUT = 10_000
 const UNAUTHORIZED = 4401
 const enc = new TextEncoder()
+// 二进制帧第一个字节的类型。0 手机发是键盘输入，mocod 发（v1）是终端原始输出
+const DATA = 0
+const RESIZE = 1
 const FRAME = 2
 const ACK = 3
 const IMAGE = 4
@@ -36,6 +39,8 @@ export class Conn {
 	private timer?: number
 	private hiddenAt = 0
 	private stopped = false
+	// close() 时摘掉回前台、网络恢复的监听
+	private life = new AbortController()
 	// 自己按流解 UTF-8 再交给 xterm.js：一个字的字节可能被切在两帧里，
 	// xterm.js 6.0.0 遇到 3 字节的字切在第 2 字节后会把这个字丢掉（tools/vtcheck 里查到的）
 	private decoder = new TextDecoder()
@@ -54,11 +59,12 @@ export class Conn {
 		private onState: (s: State) => void,
 		private images: ImageLayer,
 	) {
+		const { signal } = this.life
 		document.addEventListener('visibilitychange', () => {
 			if (document.hidden) this.hiddenAt = Date.now()
 			else this.wake(Date.now() - this.hiddenAt > 10_000)
-		})
-		window.addEventListener('online', () => this.wake(true))
+		}, { signal })
+		window.addEventListener('online', () => this.wake(true), { signal })
 	}
 
 	private set(s: State) {
@@ -98,13 +104,23 @@ export class Conn {
 		ws.onmessage = async e => {
 			if (typeof e.data !== 'string') {
 				const buf = new Uint8Array(e.data as ArrayBuffer)
-				if (buf[0] === 0) this.term.write(this.decoder.decode(buf.subarray(1), { stream: true }))
-				else if (buf[0] === FRAME) this.frame(ws, buf)
-				else if (buf[0] === IMAGE) this.images.add(new DataView(buf.buffer).getUint32(1), buf.slice(9))
-				else if (buf[0] === PLACEMENTS) this.pendingPlacements = JSON.parse(this.frameDecoder.decode(buf.subarray(1)))
-				else if (buf[0] === FORGET) {
-					const view = new DataView(buf.buffer)
-					for (let i = 1; i + 4 <= buf.length; i += 4) this.images.forget(view.getUint32(i))
+				const view = new DataView(buf.buffer)
+				switch (buf[0]) {
+					case DATA:
+						this.term.write(this.decoder.decode(buf.subarray(1), { stream: true }))
+						break
+					case FRAME:
+						this.frame(ws, buf)
+						break
+					case IMAGE:
+						this.images.add(view.getUint32(1), buf.slice(9))
+						break
+					case PLACEMENTS:
+						this.pendingPlacements = JSON.parse(this.frameDecoder.decode(buf.subarray(1)))
+						break
+					case FORGET:
+						for (let i = 1; i + 4 <= buf.length; i += 4) this.images.forget(view.getUint32(i))
+						break
 				}
 				return
 			}
@@ -180,6 +196,7 @@ export class Conn {
 	}
 
 	close() {
+		this.life.abort()
 		this.stopped = true
 		clearTimeout(this.timer)
 		const ws = this.ws
@@ -189,11 +206,11 @@ export class Conn {
 	}
 
 	send(data: string) {
-		if (this.state === 'open') this.ws?.send(frame(0, data))
+		if (this.state === 'open') this.ws?.send(frame(DATA, data))
 	}
 
 	resize(cols: number, rows: number) {
 		// 带上一格的大小：改字号时它也变了，mocod 用它回答程序的 CSI 16 t
-		if (this.state === 'open') this.ws?.send(frame(1, JSON.stringify({ cols, rows, cell: this.images.cellSize() })))
+		if (this.state === 'open') this.ws?.send(frame(RESIZE, JSON.stringify({ cols, rows, cell: this.images.cellSize() })))
 	}
 }

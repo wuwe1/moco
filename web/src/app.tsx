@@ -28,10 +28,11 @@ export function App() {
 		dropScreen(h.id)
 		update(hosts.filter(x => x.id !== h.id))
 	}
+	// 同一个地址重新配对：换掉旧的那条，它的连接也关掉
 	const added = (h: Host) => {
-		dropSession(h.id)
-		const next = [...hosts.filter(x => x.url !== h.url), h]
-		update(next)
+		const replaced = hosts.filter(x => x.url === h.url)
+		replaced.forEach(x => (dropSession(x.id), dropScreen(x.id)))
+		update([...hosts.filter(x => x.url !== h.url), h])
 		setAdding(undefined)
 		setActive(h)
 	}
