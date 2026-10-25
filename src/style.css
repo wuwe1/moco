@@ -1,0 +1,131 @@
+:root {
+	--bg: #282828;
+	--bar: #1d2021;
+	--key: #3c3836;
+	--key-on: #504945;
+	--fg: #ebdbb2;
+	--muted: #a89984;
+	--ok: #b8bb26;
+	--wait: #fabd2f;
+	--down: #fb4934;
+}
+
+/* 整页钉死：不回弹、不被拖动、不缩放（iOS 不认 user-scalable=no，靠 touch-action 和手势拦截） */
+html, body {
+	margin: 0;
+	height: 100%;
+	overflow: hidden;
+	overscroll-behavior: none;
+	background: var(--bg);
+	-webkit-text-size-adjust: 100%;
+}
+body {
+	position: fixed;
+	inset: 0;
+	touch-action: none;
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+/* 高度、位移由 visualViewport 算：键盘弹出时整体缩到键盘上方 */
+#app {
+	position: fixed;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 100dvh;
+	display: flex;
+	flex-direction: column;
+	padding-top: env(safe-area-inset-top);
+	box-sizing: border-box;
+}
+
+#term {
+	flex: 1;
+	min-height: 0;
+	padding: 4px 4px 0;
+	transition: opacity .2s;
+}
+#term.offline { opacity: .5; }
+#term .xterm-viewport { overflow-y: hidden !important; }
+
+/* 输入法正在拼的字 */
+#compose {
+	position: absolute;
+	left: 8px;
+	bottom: calc(var(--bar-h, 48px) + 6px);
+	max-width: calc(100% - 16px);
+	padding: 4px 8px;
+	border-radius: 6px;
+	background: var(--key-on);
+	color: var(--fg);
+	font: 15px/1.3 ui-monospace, Menlo, monospace;
+	white-space: pre;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+#bar {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 6px calc(6px + var(--safe-bottom, env(safe-area-inset-bottom)));
+	background: var(--bar);
+	border-top: 1px solid #32302f;
+}
+
+#dot {
+	flex: none;
+	width: 6px;
+	height: 6px;
+	margin: 0 2px 0 4px;
+	border-radius: 50%;
+	background: var(--wait);
+}
+#dot[data-state="open"] { background: var(--ok); }
+#dot[data-state="closed"] { background: var(--down); }
+
+#keys {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	gap: 6px;
+	overflow-x: auto;
+	touch-action: pan-x;
+	scrollbar-width: none;
+}
+#keys::-webkit-scrollbar { display: none; }
+
+button {
+	flex: none;
+	min-width: 40px;
+	height: 36px;
+	padding: 0 10px;
+	border: 0;
+	border-radius: 7px;
+	background: var(--key);
+	color: var(--fg);
+	font: 500 14px/1 -apple-system, system-ui, sans-serif;
+	touch-action: manipulation;
+}
+button:active, button.down { background: var(--key-on); }
+button[aria-pressed="true"] { background: var(--ok); color: var(--bar); }
+#kbd { font-size: 17px; }
+
+/* 真正接收键盘的输入框：看不见，但能拿到焦点、能跑输入法；16px 防止 iOS 聚焦时放大 */
+#input {
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	padding: 0;
+	border: 0;
+	resize: none;
+	font-size: 16px;
+	caret-color: transparent;
+}

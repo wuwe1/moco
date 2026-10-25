@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="moco">
+<meta name="theme-color" content="#282828">
+<title>moco</title>
+<!-- css -->
+</head>
+<body>
+<div id="app">
+	<div id="term"></div>
+	<div id="compose" hidden></div>
+	<div id="bar">
+		<span id="dot"></span>
+		<div id="keys">
+			<button data-key="esc">Esc</button>
+			<button data-key="tab">Tab</button>
+			<button data-key="ctrl" aria-pressed="false">Ctrl</button>
+			<button data-key="^c">^C</button>
+			<button data-key="^b">^B</button>
+			<button data-key="left" data-repeat>←</button>
+			<button data-key="up" data-repeat>↑</button>
+			<button data-key="down" data-repeat>↓</button>
+			<button data-key="right" data-repeat>→</button>
+			<button data-key="enter">⏎</button>
+		</div>
+		<button id="kbd" aria-label="键盘">⌨</button>
+		<textarea id="input" rows="1" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+	</div>
+</div>
+<!-- js -->
+</body>
+</html>
