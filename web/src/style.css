@@ -352,3 +352,74 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 	font-size: 16px;
 	caret-color: transparent;
 }
+
+/* 粘贴的退路：读不到剪贴板时出来，在按键栏上方 */
+.pastebox {
+	position: absolute;
+	left: 8px;
+	right: 8px;
+	bottom: calc(48px + var(--safe-bottom, env(safe-area-inset-bottom)) + 8px);
+	z-index: 3;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 8px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--bg);
+}
+.pastebox textarea {
+	min-height: 88px;
+	max-height: 40vh;
+	padding: 8px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	background: var(--term);
+	color: var(--fg);
+	font: 16px/1.35 var(--mono);
+	resize: none;
+	outline: none;
+	user-select: text;
+	-webkit-user-select: text;
+	-webkit-touch-callout: default;
+	touch-action: auto;
+}
+.pastebox textarea:focus { border-color: var(--key-on); }
+.pastebox .row { display: flex; align-items: center; gap: 6px; }
+.pastebox .count { flex: 1; color: var(--muted); font: 12px var(--mono); }
+.pastebox .send { background: var(--fg); color: var(--bg); font-weight: 600; }
+
+/* 放大看原图 */
+.lightbox {
+	position: absolute;
+	inset: 0;
+	z-index: 20;
+	background: rgb(0 0 0 / .94);
+}
+.lightbox .stage {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	touch-action: none;
+}
+.lightbox img {
+	position: absolute;
+	left: 0;
+	top: 0;
+	max-width: none;
+	transform-origin: 0 0;
+	-webkit-user-drag: none;
+}
+.lightbox .stage.settle img { transition: transform .25s var(--ease); }
+.lb-bar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: 44px;
+	padding: env(safe-area-inset-top) 8px 0 16px;
+}
+.lb-bar .size { flex: 1; color: var(--muted); font: 12px var(--mono); }

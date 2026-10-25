@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import type { State } from './conn'
 import { debugLines, onDebug } from './debug'
 import { keyboard } from './keyboard'
+import { Lightbox, type Picture } from './lightbox'
 import { onSessionsChange, session, stateOf, type Session } from './session'
 import type { Host } from './store'
 
@@ -30,12 +31,14 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	const kb = useRef<ReturnType<typeof keyboard> | undefined>(undefined)
 	const [drag, setDrag] = useState(0)
 	const [debug, setDebug] = useState(false)
+	const [picture, setPicture] = useState<Picture>()
+	const [pasting, setPasting] = useState(false)
 	const [, bump] = useState(0)
 	useEffect(() => (debug ? onDebug(() => bump(n => n + 1)) : undefined), [debug])
 
 	// 按键栏、输入框只绑一次
 	useEffect(() => {
-		kb.current = keyboard(root.current!, () => current.current?.term, s => current.current?.conn.send(s))
+		kb.current = keyboard(root.current!, () => current.current?.term, s => current.current?.conn.send(s), () => setPasting(true))
 		return onSessionsChange(() => bump(n => n + 1))
 	}, [])
 
@@ -50,6 +53,10 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		}
 		const s = session(host)
 		s.onTap = () => kb.current?.focus()
+		s.onImage = img => {
+			kb.current?.blur()
+			setPicture(img)
+		}
 		current.current = s
 		requestAnimationFrame(() => s.attach(panes.current!))
 	}, [host?.id])
@@ -126,6 +133,15 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 					<button class="primary" onClick={() => props.onRepair(host)}>重新配对</button>
 				</div>
 			)}
+			{pasting && (
+				<PasteBox
+					onSend={text => {
+						setPasting(false)
+						kb.current?.paste(text)
+					}}
+					onCancel={() => setPasting(false)}
+				/>
+			)}
 			<div id="compose" hidden />
 			<div id="bar">
 				<div id="keys">
@@ -144,6 +160,37 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 				<button id="kbd" aria-label="键盘">⌨</button>
 				<textarea id="input" rows={1} autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck={false} />
 			</div>
+			{picture && <Lightbox img={picture} onClose={() => setPicture(undefined)} />}
 		</div>
+	)
+}
+
+// 读不到剪贴板时的退路：一个看得见的框，长按选「粘贴」，看一眼再发
+function PasteBox(props: { onSend: (text: string) => void; onCancel: () => void }) {
+	const [text, setText] = useState('')
+	return (
+		<form
+			class="pastebox"
+			onSubmit={e => {
+				e.preventDefault()
+				if (text) props.onSend(text)
+			}}
+		>
+			<textarea
+				value={text}
+				onInput={e => setText((e.target as HTMLTextAreaElement).value)}
+				placeholder="读不到剪贴板。长按这里选「粘贴」"
+				rows={4}
+				autocapitalize="off"
+				autocomplete="off"
+				autocorrect="off"
+				spellcheck={false}
+			/>
+			<div class="row">
+				<span class="count">{text ? `${text.split('\n').length} 行` : ''}</span>
+				<button type="button" onClick={props.onCancel}>取消</button>
+				<button type="submit" class="send" disabled={!text}>发送</button>
+			</div>
+		</form>
 	)
 }

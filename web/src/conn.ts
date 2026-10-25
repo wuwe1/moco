@@ -2,7 +2,7 @@
 // hello（公钥）→ challenge（随机数、机器名）→ auth（签名）→ ready，之后二进制帧第一个字节是类型。
 // 断了自己重连；mocod 用 4401 关连接说明这台手机没登记或签名不对，这时不再重连，等重新配对
 import type { Terminal } from '@xterm/xterm'
-import { dlog } from './debug'
+import { dlog, logTo } from './debug'
 import type { ImageLayer, Placement } from './images'
 import { deviceKey, signChallenge } from './keys'
 import type { Host } from './store'
@@ -20,6 +20,7 @@ const ACK = 3
 const IMAGE = 4
 const PLACEMENTS = 5
 const FORGET = 6
+const LOG = 7
 
 const frame = (type: number, body: string) => {
 	const b = enc.encode(body)
@@ -45,6 +46,7 @@ export class Conn {
 	retries = 0
 	// 下一帧画完时生效的放置（图片和那一帧的文字同时出现）
 	private pendingPlacements?: Placement[]
+	private unlog = () => {}
 
 	constructor(
 		private host: Host,
@@ -120,6 +122,7 @@ export class Conn {
 				this.images.reset()
 				this.pendingPlacements = undefined
 				this.set('open')
+				this.unlog = logTo(line => ws.readyState === WebSocket.OPEN && ws.send(frame(LOG, line)))
 				// 握手期间屏幕可能已经变过大小
 				this.resize(this.term.cols, this.term.rows)
 			}
@@ -128,6 +131,7 @@ export class Conn {
 			clearTimeout(guard)
 			dlog(`WebSocket 关闭 code=${e.code} reason=${e.reason || '无'} clean=${e.wasClean}${this.ws !== ws ? '（旧连接，忽略）' : ''}`)
 			if (this.ws !== ws) return
+			this.unlog()
 			this.lastClose = e.reason ? `${e.code} ${e.reason}` : String(e.code)
 			this.retries++
 			if (e.code === UNAUTHORIZED) return this.set('unauthorized')

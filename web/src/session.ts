@@ -46,7 +46,9 @@ export class Session {
 	private fit = new FitAddon()
 	private serializer = new SerializeAddon()
 	private opened = false
+	// 轻点：点在图上就放大看原图，程序开了鼠标上报就当成点一下，都不是就弹键盘
 	onTap = () => {}
+	onImage = (_img: { png: Uint8Array<ArrayBuffer>; w: number; h: number }) => {}
 
 	constructor(readonly host: Host) {
 		this.el.className = 'pane'
@@ -89,10 +91,41 @@ export class Session {
 			this.opened = true
 			this.term.open(this.el)
 			this.images.mount()
-			gestures(this.el, this.term, { onTap: () => this.onTap(), onFont: setFont })
+			gestures(this.el, this.term, { onTap: (x, y) => this.tap(x, y), onFont: setFont })
 		}
 		this.fitNow()
 		if (this.conn.state === 'closed') this.conn.connect()
+	}
+
+	private tap(x: number, y: number) {
+		const img = this.images.hit(x, y)
+		if (img) return this.onImage(img)
+		if (!this.click(x, y)) this.onTap()
+	}
+
+	// 程序开了鼠标上报（herdr、pi 都开）：在那一格按下、松开左键。
+	// 用 xterm.js 内部的鼠标服务编码（按程序设的 SGR 等格式），不派发 DOM 的 mousedown：
+	// 那样 xterm.js 会把焦点抢到它自己的输入框，弹出另一个键盘
+	private click(clientX: number, clientY: number) {
+		const mouse = (this.term as any)._core?.coreMouseService
+		const screen = this.term.element?.querySelector('.xterm-screen')
+		if (this.term.modes.mouseTrackingMode === 'none' || !mouse?.triggerMouseEvent || !screen) return false
+		const r = screen.getBoundingClientRect()
+		const x = clientX - r.left
+		const y = clientY - r.top
+		const at = {
+			col: Math.floor(x / (r.width / this.term.cols)),
+			row: Math.floor(y / (r.height / this.term.rows)),
+			x: Math.round(x),
+			y: Math.round(y),
+			button: 0,
+			ctrl: false,
+			alt: false,
+			shift: false,
+		}
+		mouse.triggerMouseEvent({ ...at, action: 1 })
+		mouse.triggerMouseEvent({ ...at, action: 0 })
+		return true
 	}
 
 	detach() {

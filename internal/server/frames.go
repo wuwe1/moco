@@ -38,6 +38,7 @@ const (
 	msgImage      = 4
 	msgPlacements = 5
 	msgForget     = 6
+	msgLog        = 7 // 手机 → mocod：手机上的一行日志（web/src/debug.ts），记进 mocod 的日志
 )
 
 func (s *Server) pumpFrames(ctx context.Context, c *websocket.Conn, sess *term.Session, hello message) string {
@@ -202,6 +203,8 @@ func (s *Server) pumpFrames(ctx context.Context, c *websocket.Conn, sess *term.S
 				scr.Resize(int(sz.Cols), int(sz.Rows))
 				signal()
 			}
+		case msgLog:
+			s.Log.Info("phone", "msg", string(data[1:]))
 		case msgAck:
 			select {
 			case acks <- struct{}{}:

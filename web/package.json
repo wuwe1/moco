@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node build.mjs",
+    "dev": "vite",
+    "build": "vite build",
     "check": "tsc"
   },
   "dependencies": {
@@ -14,7 +15,8 @@
     "preact": "^11.0.2"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2",
-    "typescript": "^7.0.2"
+    "@preact/preset-vite": "^2.10.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
   }
 }

@@ -9,6 +9,8 @@ export type Placement = { i: number; x: number; y: number; c: number; r: number;
 export class ImageLayer {
 	private canvas = document.createElement('canvas')
 	private bitmaps = new Map<number, ImageBitmap>()
+	// 原图的 PNG：点图放大时给 <img> 用
+	private pngs = new Map<number, Uint8Array<ArrayBuffer>>()
 	private placements: Placement[] = []
 
 	constructor(private term: Terminal) {
@@ -35,6 +37,7 @@ export class ImageLayer {
 			const bitmap = await createImageBitmap(new Blob([png], { type: 'image/png' }))
 			this.bitmaps.get(id)?.close()
 			this.bitmaps.set(id, bitmap)
+			this.pngs.set(id, png)
 			this.draw()
 		} catch {
 			// 解不出来就不画，文字照常
@@ -44,6 +47,7 @@ export class ImageLayer {
 	forget(id: number) {
 		this.bitmaps.get(id)?.close()
 		this.bitmaps.delete(id)
+		this.pngs.delete(id)
 	}
 
 	set(placements: Placement[]) {
@@ -55,6 +59,7 @@ export class ImageLayer {
 	reset() {
 		for (const b of this.bitmaps.values()) b.close()
 		this.bitmaps.clear()
+		this.pngs.clear()
 		this.placements = []
 		this.draw()
 	}
@@ -89,6 +94,28 @@ export class ImageLayer {
 			const dw = p.c ? p.c * cw : p.sw
 			const dh = p.r ? p.r * ch : p.sh
 			ctx.drawImage(bitmap, p.sx, p.sy, p.sw, p.sh, p.x * cw, p.y * ch, dw, dh)
+		}
+	}
+
+	// 手指点到的那张图（后放的盖在上面，先查）：终端里只画了缩小、裁过的一块，放大看原图用
+	hit(clientX: number, clientY: number): { png: Uint8Array<ArrayBuffer>; w: number; h: number } | undefined {
+		const screen = this.term.element?.querySelector('.xterm-screen') as HTMLElement | null
+		if (!screen || !this.term.cols || !this.term.rows) return
+		const r = screen.getBoundingClientRect()
+		const cw = r.width / this.term.cols
+		const ch = r.height / this.term.rows
+		const x = clientX - r.left
+		const y = clientY - r.top
+		for (let k = this.placements.length - 1; k >= 0; k--) {
+			const p = this.placements[k]
+			const bitmap = this.bitmaps.get(p.i)
+			const png = this.pngs.get(p.i)
+			if (!bitmap || !png) continue
+			const left = p.x * cw
+			const top = p.y * ch
+			const w = p.c ? p.c * cw : p.sw
+			const h = p.r ? p.r * ch : p.sh
+			if (x >= left && x < left + w && y >= top && y < top + h) return { png, w: bitmap.width, h: bitmap.height }
 		}
 	}
 

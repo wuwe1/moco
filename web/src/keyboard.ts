@@ -7,7 +7,8 @@ import { dlog } from './debug'
 const SENTINEL = '​'
 
 // root 是终端抽屉：按键栏、输入框都在里面；term 取当前打开的那个连接的终端
-export function keyboard(root: HTMLElement, term: () => Terminal | undefined, send: (s: string) => void) {
+// onPasteFailed：读不到剪贴板（没给权限、点掉了系统的「粘贴」气泡）时，让人在一个看得见的框里自己粘贴
+export function keyboard(root: HTMLElement, term: () => Terminal | undefined, send: (s: string) => void, onPasteFailed: () => void) {
 	const input = root.querySelector('#input') as HTMLTextAreaElement
 	const compose = root.querySelector('#compose') as HTMLDivElement
 	const ctrlBtn = root.querySelector('[data-key="ctrl"]') as HTMLButtonElement
@@ -131,9 +132,12 @@ export function keyboard(root: HTMLElement, term: () => Terminal | undefined, se
 	root.querySelector('[data-key="paste"]')?.addEventListener('click', async () => {
 		try {
 			const text = await navigator.clipboard.readText()
+			dlog(`读剪贴板：${text.length} 个字`)
 			if (text) paste(text)
+			else onPasteFailed()
 		} catch (e) {
 			dlog(`读剪贴板失败：${e}`)
+			onPasteFailed()
 		}
 	})
 
@@ -145,5 +149,5 @@ export function keyboard(root: HTMLElement, term: () => Terminal | undefined, se
 	})
 
 	reset()
-	return { focus: () => input.focus(), blur: () => input.blur() }
+	return { focus: () => input.focus(), blur: () => input.blur(), paste }
 }

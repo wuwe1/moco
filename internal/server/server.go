@@ -61,8 +61,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("OPTIONS /pair", s.preflight)
 	mux.HandleFunc("POST /pair", s.pair)
 	mux.HandleFunc("GET /ws", s.ws)
-	if s.Cfg.Web != "" {
-		mux.Handle("GET /", http.FileServer(http.Dir(s.Cfg.Web)))
+	if h := s.web(); h != nil {
+		mux.Handle("GET /", h)
 	}
 	return mux
 }

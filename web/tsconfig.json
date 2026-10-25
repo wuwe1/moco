@@ -15,6 +15,7 @@
     "jsxImportSource": "preact"
   },
   "include": [
+    "vite.config.ts",
     "src"
   ]
 }

@@ -1,11 +1,11 @@
-// 终端上的手势：单指拖动 = 滚轮（交给 herdr / pi 自己滚，松手带惯性），双指捏合 = 改字号，轻点 = 弹键盘
+// 终端上的手势：单指拖动 = 滚轮（交给 herdr / pi 自己滚，松手带惯性），双指捏合 = 改字号，轻点交给 onTap（点在哪由它定）
 import type { Terminal } from '@xterm/xterm'
 
 const FONT_MIN = 9
 const FONT_MAX = 24
 const WHEEL_PER_FRAME = 3
 
-export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: () => void; onFont: (size: number) => void }) {
+export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: number, y: number) => void; onFont: (size: number) => void }) {
 	let mode: 'none' | 'scroll' | 'pinch' = 'none'
 	let lastY = 0
 	let lastT = 0
@@ -125,7 +125,7 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: () => v
 		e.stopPropagation()
 		if (e.touches.length) return
 		if (mode === 'scroll') {
-			if (moved < 8 && e.timeStamp - startT < 300) opts.onTap()
+			if (moved < 8 && e.timeStamp - startT < 300) opts.onTap(x, y)
 			else if (e.timeStamp - lastT < 80 && Math.abs(velocity) > 0.3) glide()
 		}
 		mode = 'none'
