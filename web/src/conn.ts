@@ -2,12 +2,15 @@
 // hello（公钥）→ challenge（随机数、机器名）→ auth（签名）→ ready，之后二进制帧第一个字节是类型。
 // 断了自己重连；mocod 用 4401 关连接说明这台手机没登记或签名不对，这时不再重连，等重新配对
 import type { Terminal } from '@xterm/xterm'
+import { dlog } from './debug'
 import { deviceKey, signChallenge } from './keys'
 import type { Host } from './store'
 
 export type State = 'connecting' | 'open' | 'closed' | 'unauthorized'
 
 const DELAYS = [300, 1000, 2000, 4000]
+// 握手 10 秒还没完成就当这条卡死了，关掉重来
+const HANDSHAKE_TIMEOUT = 10_000
 const UNAUTHORIZED = 4401
 const enc = new TextEncoder()
 
@@ -50,14 +53,31 @@ export class Conn {
 	connect() {
 		clearTimeout(this.timer)
 		this.stopped = false
-		if (this.ws && this.ws.readyState <= WebSocket.OPEN) return
-		this.set('connecting')
-		const ws = new WebSocket(this.host.url.replace(/^http/, 'ws') + '/ws', ['moco.v1'])
-		ws.binaryType = 'arraybuffer'
-		ws.onopen = async () => {
-			const { pub } = await deviceKey()
-			ws.send(JSON.stringify({ type: 'hello', key: pub, cols: this.term.cols, rows: this.term.rows }))
+		if (this.ws && this.ws.readyState <= WebSocket.OPEN) {
+			dlog(`connect：已有连接 readyState=${this.ws.readyState}，不新建`)
+			return
 		}
+		this.set('connecting')
+		const url = this.host.url.replace(/^http/, 'ws') + '/ws'
+		dlog(`新建 WebSocket ${url}`)
+		const ws = new WebSocket(url, ['moco.v1'])
+		ws.binaryType = 'arraybuffer'
+		const guard = window.setTimeout(() => {
+			if (this.ws === ws && this.state !== 'open') {
+				dlog(`握手 ${HANDSHAKE_TIMEOUT / 1000} 秒没完成（readyState=${ws.readyState}），关掉重来`)
+				ws.close()
+			}
+		}, HANDSHAKE_TIMEOUT)
+		ws.onopen = async () => {
+			dlog(`WebSocket 打开，子协议 ${ws.protocol || '无'}`)
+			try {
+				const { pub } = await deviceKey()
+				ws.send(JSON.stringify({ type: 'hello', key: pub, cols: this.term.cols, rows: this.term.rows }))
+			} catch (e) {
+				dlog(`取设备密钥失败：${e}`)
+			}
+		}
+		ws.onerror = () => dlog('WebSocket error')
 		ws.onmessage = async e => {
 			if (typeof e.data !== 'string') {
 				const buf = new Uint8Array(e.data as ArrayBuffer)
@@ -65,6 +85,7 @@ export class Conn {
 				return
 			}
 			const msg = JSON.parse(e.data)
+			dlog(`收到 ${msg.type}${msg.code !== undefined ? ' code=' + msg.code : ''}`)
 			if (msg.type === 'challenge') {
 				// 只给配对时那台机器签：签名里带机器名，名字对不上说明连错了地方
 				if (msg.name !== this.host.name) return ws.close(4000, 'host mismatch')
@@ -79,18 +100,25 @@ export class Conn {
 			}
 		}
 		ws.onclose = e => {
+			clearTimeout(guard)
+			dlog(`WebSocket 关闭 code=${e.code} reason=${e.reason || '无'} clean=${e.wasClean}${this.ws !== ws ? '（旧连接，忽略）' : ''}`)
 			if (this.ws !== ws) return
 			this.lastClose = e.reason ? `${e.code} ${e.reason}` : String(e.code)
 			this.retries++
 			if (e.code === UNAUTHORIZED) return this.set('unauthorized')
 			this.set('closed')
-			if (!this.stopped) this.timer = window.setTimeout(() => this.connect(), DELAYS[Math.min(this.tries++, DELAYS.length - 1)])
+			if (!this.stopped) {
+				const wait = DELAYS[Math.min(this.tries++, DELAYS.length - 1)]
+				dlog(`${wait}ms 后重连`)
+				this.timer = window.setTimeout(() => this.connect(), wait)
+			}
 		}
 		this.ws = ws
 	}
 
 	// 回到前台、网络恢复：立刻重连，不等退避。后台待久了的连接可能已经半死，直接换一条
 	private wake(stale: boolean) {
+		dlog(`wake stale=${stale} state=${this.state} readyState=${this.ws?.readyState}`)
 		if (this.stopped || this.state === 'unauthorized') return
 		this.tries = 0
 		if (stale && this.ws?.readyState === WebSocket.OPEN) {

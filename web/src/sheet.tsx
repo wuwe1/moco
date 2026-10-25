@@ -2,6 +2,7 @@
 // 按键栏、输入框只有一套，跟着当前打开的连接走
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type { State } from './conn'
+import { debugLines, onDebug } from './debug'
 import { keyboard } from './keyboard'
 import { onSessionsChange, session, stateOf, type Session } from './session'
 import type { Host } from './store'
@@ -28,7 +29,9 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	const current = useRef<Session | undefined>(undefined)
 	const kb = useRef<ReturnType<typeof keyboard> | undefined>(undefined)
 	const [drag, setDrag] = useState(0)
+	const [debug, setDebug] = useState(false)
 	const [, bump] = useState(0)
+	useEffect(() => (debug ? onDebug(() => bump(n => n + 1)) : undefined), [debug])
 
 	// 按键栏、输入框只绑一次
 	useEffect(() => {
@@ -74,9 +77,9 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	}, [])
 
 	// 把手往下拖：超过 120px 或甩得够快就收起
-	const grab = useRef({ y: 0, t: 0, active: false })
+	const grab = useRef({ y: 0, t: 0, active: false, onStatus: false })
 	const down = (e: PointerEvent) => {
-		grab.current = { y: e.clientY, t: e.timeStamp, active: true }
+		grab.current = { y: e.clientY, t: e.timeStamp, active: true, onStatus: !!(e.target as HTMLElement).closest('.status') }
 		;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
 	}
 	const move = (e: PointerEvent) => {
@@ -88,6 +91,8 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		const dy = e.clientY - grab.current.y
 		const v = dy / Math.max(1, e.timeStamp - grab.current.t)
 		setDrag(0)
+		// 点一下状态文字：开关连接日志
+		if (Math.abs(dy) < 6 && grab.current.onStatus) return setDebug(d => !d)
 		if (dy > 120 || (dy > 30 && v > 0.6)) {
 			current.current?.snapshot()
 			props.onClose()
@@ -110,6 +115,11 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 			</header>
 			{/* 终端节点由 Session 自己挂进来，这里不放 Preact 管的子节点 */}
 			<div id="panes" ref={panes} />
+			{debug && (
+				<pre class="debug" onClick={() => setDebug(false)}>
+					{debugLines().join('\n')}
+				</pre>
+			)}
 			{state === 'unauthorized' && host && (
 				<div class="notice">
 					<p>{host.name} 不认这台手机：还没配对，或者在电脑上被 <code>mocod revoke</code> 删掉了。</p>

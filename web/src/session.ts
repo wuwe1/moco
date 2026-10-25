@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { Terminal } from '@xterm/xterm'
 import { Conn, type State } from './conn'
+import { dlog } from './debug'
 import { gestures } from './gestures'
 import { fontSize, saveScreen, setFontSize, type Host } from './store'
 
@@ -71,6 +72,7 @@ export class Session {
 
 	// 挂到终端页上：第一次挂上时才真正打开终端、开始连接（xterm 要量得到尺寸）
 	attach(parent: HTMLElement) {
+		dlog(`打开 ${this.host.name}，连接状态 ${this.conn.state}`)
 		if (this.el.parentElement !== parent) parent.appendChild(this.el)
 		this.el.hidden = false
 		if (!this.opened) {
@@ -83,6 +85,7 @@ export class Session {
 	}
 
 	detach() {
+		dlog(`收起 ${this.host.name}，连接状态 ${this.conn.state}`)
 		this.snapshot()
 		this.el.hidden = true
 	}

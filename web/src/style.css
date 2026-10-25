@@ -244,7 +244,28 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 	background: var(--key-on);
 }
 #grab .title { font-weight: 600; }
-#grab .status { margin-left: auto; color: var(--muted); font-size: 12px; }
+#grab .status { margin-left: auto; color: var(--muted); font-size: 12px; text-decoration: underline dotted; text-underline-offset: 3px; }
+
+/* 连接日志：盖在终端上，点一下关掉 */
+.debug {
+	position: absolute;
+	top: calc(env(safe-area-inset-top) + 30px);
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 2;
+	margin: 0;
+	padding: 8px 10px;
+	overflow-y: auto;
+	touch-action: pan-y;
+	background: rgb(29 32 33 / .96);
+	color: var(--fg);
+	font: 11px/1.45 var(--mono);
+	white-space: pre-wrap;
+	word-break: break-all;
+	user-select: text;
+	-webkit-user-select: text;
+}
 
 #panes {
 	position: relative;
