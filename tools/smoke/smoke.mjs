@@ -304,9 +304,9 @@ try {
 	})
 	await check('设置页：换字体、调字号', async () => {
 		await page.click('#home [aria-label="设置"]')
-		await page.click('#settings .row:has-text("JetBrains Mono")')
+		await page.click('#settings [data-font="jetbrains"]')
 		await until(() => page.evaluate(() => localStorage.getItem('moco.fontFamily') === 'jetbrains'), '存下字体')
-		const size = () => page.locator('#settings .stepper .value').textContent()
+		const size = () => page.locator('#settings [data-font-size]').textContent()
 		const before = Number(await size())
 		await page.click('#settings [aria-label="大一号"]')
 		if (Number(await size()) !== before + 1) throw new Error('字号没变大')

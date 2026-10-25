@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { deviceKey, fingerprint } from './keys'
-import { Check, ChevronLeft, Ellipsis, KeyRound, Minus, Plus, Settings, Type } from 'lucide-react'
-import { FONTS, type FontKey } from './fonts'
-import { connOf, dropSession, setFontFamilyForAllSessions, setFontSizeForAllSessions, useRerenderOnSessionChange } from './session'
+import { deviceKey } from './keys'
+import { Ellipsis, Plus, Settings } from 'lucide-react'
+import { connOf, dropSession, useRerenderOnSessionChange } from './session'
+import { SettingsPage } from './settings'
 import { Sheet } from './sheet'
-import { deviceName, dropScreen, FONT_MAX, FONT_MIN, fontKey, fontSize, loadHosts, loadScreen, normalizeUrl, saveHosts, setDeviceName, type Host } from './store'
+import { deviceName, dropScreen, loadHosts, loadScreen, normalizeUrl, saveHosts, setDeviceName, type Host } from './store'
 
 type Health = 'checking' | 'online' | 'offline'
 
@@ -130,73 +130,6 @@ function Home(props: {
 					)
 				})}
 			</ul>
-		</main>
-	)
-}
-
-function SettingsPage(props: { onBack: () => void }) {
-	const [font, setFont] = useState(fontKey)
-	const [size, setSize] = useState(fontSize)
-	const [fp, setFp] = useState('')
-	useEffect(() => {
-		fingerprint().then(setFp, () => setFp(''))
-	}, [])
-	const resize = (n: number) => {
-		const next = Math.min(FONT_MAX, Math.max(FONT_MIN, n))
-		setSize(next)
-		setFontSizeForAllSessions(next)
-	}
-
-	return (
-		<main id="settings">
-			<header className="topbar">
-				<button className="round" aria-label="返回" onClick={props.onBack}>
-					<ChevronLeft size={22} />
-				</button>
-				<h1>设置</h1>
-				<span />
-			</header>
-			<h2 className="section">终端文字</h2>
-			<div className="group">
-				<div className="row">
-					<Type size={20} className="lead" />
-					<span className="label">字号</span>
-					<span className="stepper">
-						<button aria-label="小一号" onClick={() => resize(size - 1)} disabled={size <= FONT_MIN}>
-							<Minus size={18} />
-						</button>
-						<span className="value">{size}</span>
-						<button aria-label="大一号" onClick={() => resize(size + 1)} disabled={size >= FONT_MAX}>
-							<Plus size={18} />
-						</button>
-					</span>
-				</div>
-			</div>
-			<h2 className="section">字体</h2>
-			<div className="group">
-				{(Object.keys(FONTS) as FontKey[]).map(k => (
-					<button
-						key={k}
-						className="row"
-						aria-pressed={font === k}
-						onClick={() => {
-							setFont(k)
-							setFontFamilyForAllSessions(k)
-						}}
-					>
-						<span className="label">{FONTS[k].label}</span>
-						{font === k && <Check size={20} className="check" />}
-					</button>
-				))}
-			</div>
-			<h2 className="section">这台手机</h2>
-			<div className="group">
-				<div className="row">
-					<KeyRound size={20} className="lead" />
-					<span className="label">密钥指纹</span>
-					<span className="value mono">{fp}</span>
-				</div>
-			</div>
 		</main>
 	)
 }

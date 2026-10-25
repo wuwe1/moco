@@ -1,0 +1,54 @@
+@layer theme, base, legacy, components, utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./style.css" layer(legacy);
+
+:root {
+	--background: var(--bg);
+	--foreground: var(--fg);
+	--card: var(--surface);
+	--card-foreground: var(--fg);
+	--popover: var(--surface);
+	--popover-foreground: var(--fg);
+	--primary: var(--fg);
+	--primary-foreground: var(--bg);
+	--secondary: var(--key);
+	--secondary-foreground: var(--fg);
+	--muted: var(--key);
+	--muted-foreground: var(--dim);
+	--accent: var(--key-on);
+	--accent-foreground: var(--fg);
+	--destructive: var(--down);
+	--border: var(--line);
+	--input: var(--key);
+	--ring: var(--key-on);
+	--radius: 0.75rem;
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-ok: var(--ok);
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+	--font-sans: -apple-system, system-ui, sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}

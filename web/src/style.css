@@ -6,7 +6,7 @@
 	--key: #3c3836;
 	--key-on: #504945;
 	--fg: #ebdbb2;
-	--muted: #928374;
+	--dim: #928374;
 	--ok: #b8bb26;
 	--wait: #fabd2f;
 	--down: #fb4934;
@@ -40,7 +40,7 @@ body {
 [hidden] { display: none !important; }
 code { font: 13px var(--mono); color: var(--fg); }
 
-button {
+:where(#home, #add, #sheet, .lightbox) button {
 	flex: none;
 	min-width: 40px;
 	height: 36px;
@@ -52,13 +52,13 @@ button {
 	font: 500 14px/1 var(--sans);
 	touch-action: manipulation;
 }
-button:active, button.down { background: var(--key-on); }
-button[aria-pressed="true"] { background: var(--ok); color: var(--bg); }
-button.primary { background: var(--fg); color: var(--bg); height: 44px; font-size: 16px; font-weight: 600; }
-button.primary:active { opacity: .85; }
-button:disabled { opacity: .5; }
-button.text, button.icon { background: none; color: var(--fg); padding: 0 4px; }
-button.icon { font-size: 22px; font-weight: 300; }
+:where(#home, #add, #sheet, .lightbox) button:active, :where(#home, #add, #sheet, .lightbox) button.down { background: var(--key-on); }
+:where(#home, #add, #sheet, .lightbox) button[aria-pressed="true"] { background: var(--ok); color: var(--bg); }
+:where(#home, #add, #sheet, .lightbox) button.primary { background: var(--fg); color: var(--bg); height: 44px; font-size: 16px; font-weight: 600; }
+:where(#home, #add, #sheet, .lightbox) button.primary:active { opacity: .85; }
+:where(#home, #add, #sheet, .lightbox) button:disabled { opacity: .5; }
+:where(#home, #add, #sheet, .lightbox) button.text, :where(#home, #add, #sheet, .lightbox) button.icon { background: none; color: var(--fg); padding: 0 4px; }
+:where(#home, #add, #sheet, .lightbox) button.icon { font-size: 22px; font-weight: 300; }
 
 .dot {
 	flex: none;
@@ -96,12 +96,12 @@ button.icon { font-size: 22px; font-weight: 300; }
 
 .section {
 	margin: 18px 20px 8px;
-	color: var(--muted);
+	color: var(--dim);
 	font-size: 13px;
 	font-weight: 500;
 }
 .actions { display: flex; gap: 8px; }
-button.round {
+:where(#home, #add, #sheet, .lightbox) button.round {
 	min-width: 0;
 	width: 38px;
 	height: 38px;
@@ -136,7 +136,7 @@ button.round {
 	inset: 0;
 	display: grid;
 	place-items: center;
-	color: var(--muted);
+	color: var(--dim);
 	font-size: 13px;
 }
 .meta {
@@ -155,54 +155,16 @@ button.round {
 	white-space: nowrap;
 	font-weight: 600;
 }
-.meta .more { min-width: 32px; height: 32px; padding: 0; background: none; color: var(--muted); display: inline-grid; place-items: center; }
+.meta .more { min-width: 32px; height: 32px; padding: 0; background: none; color: var(--dim); display: inline-grid; place-items: center; }
 .host .addr {
 	padding-left: 16px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	color: var(--muted);
+	color: var(--dim);
 	font: 12px var(--mono);
 }
 
-#settings .group {
-	margin: 0 16px;
-	overflow: hidden;
-	border-radius: 12px;
-	background: var(--surface);
-}
-#settings .row {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	box-sizing: border-box;
-	width: 100%;
-	min-height: 52px;
-	height: auto;
-	padding: 0 14px;
-	border: 0;
-	border-top: 1px solid var(--line);
-	border-radius: 0;
-	background: none;
-	color: var(--fg);
-	font: 16px var(--sans);
-	text-align: left;
-}
-#settings .row:first-child { border-top: 0; }
-#settings button.row:active { background: var(--key); }
-#settings .lead { color: var(--muted); flex: none; }
-#settings .label { flex: 1; }
-#settings .value { color: var(--muted); }
-#settings .mono { font-family: var(--mono); }
-#settings .check { color: var(--ok); }
-.stepper {
-	display: flex;
-	align-items: center;
-	border-radius: 999px;
-	background: var(--key);
-}
-.stepper button { min-width: 0; width: 40px; height: 36px; padding: 0; background: none; display: inline-grid; place-items: center; }
-.stepper .value { min-width: 28px; text-align: center; color: var(--fg) !important; font-variant-numeric: tabular-nums; }
 
 #add form {
 	display: flex;
@@ -212,15 +174,15 @@ button.round {
 	max-width: 480px;
 	margin: 0 auto;
 }
-.hint { margin: 0; color: var(--muted); font-size: 14px; }
-label {
+.hint { margin: 0; color: var(--dim); font-size: 14px; }
+:where(#home, #add, #sheet, .lightbox) label {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
-	color: var(--muted);
+	color: var(--dim);
 	font-size: 13px;
 }
-input {
+:where(#home, #add, #sheet, .lightbox) input {
 	height: 44px;
 	padding: 0 12px;
 	border: 1px solid var(--line);
@@ -232,8 +194,8 @@ input {
 	-webkit-user-select: text;
 	outline: none;
 }
-input:focus { border-color: var(--key-on); }
-input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
+:where(#home, #add, #sheet, .lightbox) input:focus { border-color: var(--key-on); }
+:where(#home, #add, #sheet, .lightbox) input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 .error { margin: 0; color: var(--down); font-size: 14px; }
 
 #sheet {
@@ -290,7 +252,7 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 	background: var(--key-on);
 }
 #grab .title { font-weight: 600; }
-#grab .status { margin-left: auto; color: var(--muted); font-size: 12px; text-decoration: underline dotted; text-underline-offset: 3px; }
+#grab .status { margin-left: auto; color: var(--dim); font-size: 12px; text-decoration: underline dotted; text-underline-offset: 3px; }
 
 .debug {
 	position: absolute;
@@ -444,7 +406,7 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 }
 .pastebox textarea:focus { border-color: var(--key-on); }
 .pastebox .row { display: flex; align-items: center; gap: 6px; }
-.pastebox .count { flex: 1; color: var(--muted); font: 12px var(--mono); }
+.pastebox .count { flex: 1; color: var(--dim); font: 12px var(--mono); }
 .pastebox .send { background: var(--fg); color: var(--bg); font-weight: 600; }
 
 .lightbox {
@@ -479,5 +441,5 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 	height: 44px;
 	padding: env(safe-area-inset-top) 8px 0 16px;
 }
-.lb-bar .size { flex: 1; color: var(--muted); font: 12px var(--mono); }
+.lb-bar .size { flex: 1; color: var(--dim); font: 12px var(--mono); }
 .topbar h1 .dev { margin-left: 6px; color: var(--wait); font: 500 12px var(--mono); vertical-align: middle; }
