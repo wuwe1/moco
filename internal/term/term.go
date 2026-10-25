@@ -19,11 +19,7 @@ type Session struct {
 
 // Start 经登录 shell 启动命令：launchd、systemd 给的 PATH 很短，不经 shell 找不到 herdr，herdr 再开的 pi 也找不到 node
 func Start(command []string, cols, rows uint16) (*Session, error) {
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/sh"
-	}
-	cmd := exec.Command(shell, "-lc", "exec "+quote(command))
+	cmd := exec.Command(Shell(), "-lc", "exec "+quote(command))
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
 	if os.Getenv("LANG") == "" {
 		cmd.Env = append(cmd.Env, "LANG=en_US.UTF-8")
@@ -42,6 +38,14 @@ func Start(command []string, cols, rows uint16) (*Session, error) {
 		close(s.done)
 	}()
 	return s, nil
+}
+
+// Shell 是用户的登录 shell
+func Shell() string {
+	if sh := os.Getenv("SHELL"); sh != "" {
+		return sh
+	}
+	return "/bin/sh"
 }
 
 func (s *Session) Read(p []byte) (int, error)  { return s.tty.Read(p) }

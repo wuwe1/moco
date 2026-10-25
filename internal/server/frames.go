@@ -33,6 +33,11 @@ import (
 //	手机 → [8][编号 uint32][图片]                 存进 $TMPDIR/moco/
 //	mocod → {type:"uploaded", id, path} 或 {type:"uploaded", id, error}
 //
+// 手机问电脑上的 git 仓库（只读，见 git.go），可以同时问好几个，回答不按顺序：
+//
+//	手机 → [9][JSON {id, op, ...参数}]           op：repos、status、diff、log、commit、tree、file
+//	mocod → {type:"reply", id, data} 或 {type:"reply", id, error}
+//
 // 手机没确认的帧最多 framesInFlight 个；再有变化就攒着，确认回来时把攒下的合成一帧发。
 // 手机收得慢时帧变少、画面跳着更新，但不会越积越多，程序那边也从不等网络。
 const framesInFlight = 2
@@ -45,6 +50,7 @@ const (
 	msgForget     = 6
 	msgLog        = 7 // 手机 → mocod：手机上的一行日志（web/src/debug.ts），记进 mocod 的日志
 	msgUpload     = 8
+	msgRequest    = 9
 )
 
 func (s *Server) pumpFrames(ctx context.Context, c *websocket.Conn, sess *term.Session, hello message) string {
@@ -213,6 +219,8 @@ func (s *Server) pumpFrames(ctx context.Context, c *websocket.Conn, sess *term.S
 			s.Log.Info("phone", "msg", string(data[1:]))
 		case msgUpload:
 			s.upload(ctx, c, data)
+		case msgRequest:
+			s.answer(ctx, c, data)
 		case msgAck:
 			select {
 			case acks <- struct{}{}:

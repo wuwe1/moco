@@ -371,6 +371,8 @@ func (s *Server) pump(ctx context.Context, c *websocket.Conn, sess *term.Session
 			}
 		case msgUpload:
 			s.upload(ctx, c, data)
+		case msgRequest:
+			s.answer(ctx, c, data)
 		}
 	}
 }
