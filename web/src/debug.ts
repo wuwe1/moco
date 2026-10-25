@@ -23,7 +23,7 @@ export function logTo(fn: (line: string) => void) {
 }
 
 export const debugLines = () => lines
-export const onDebug = (fn: () => void) => (listeners.add(fn), () => listeners.delete(fn))
+export const onDebug = (fn: () => void) => (listeners.add(fn), () => void listeners.delete(fn))
 
 document.addEventListener('visibilitychange', () => dlog(document.hidden ? '页面切到后台' : '页面回到前台'))
 window.addEventListener('online', () => dlog('网络：online'))

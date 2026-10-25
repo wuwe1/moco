@@ -1,7 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { UnicodeGraphemesAddon } from '@xterm/addon-unicode-graphemes'
 import { Terminal } from '@xterm/xterm'
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useState } from 'react'
 import { Conn } from './conn'
 import { theme } from './theme'
 import { dlog } from './debug'

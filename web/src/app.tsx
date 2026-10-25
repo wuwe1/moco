@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useState, type FormEvent } from 'react'
 import { deviceKey, fingerprint } from './keys'
-import { Check, ChevronLeft, Ellipsis, KeyRound, Minus, Plus, Settings, Type } from 'lucide-preact'
+import { Check, ChevronLeft, Ellipsis, KeyRound, Minus, Plus, Settings, Type } from 'lucide-react'
 import { FONTS, type FontKey } from './fonts'
 import { connOf, dropSession, setFontFamilyForAllSessions, setFontSizeForAllSessions, useRerenderOnSessionChange } from './session'
 import { Sheet } from './sheet'
@@ -91,31 +91,31 @@ function Home(props: {
 
 	return (
 		<main id="home" hidden={props.hidden}>
-			<header class="topbar">
-				<h1>moco{import.meta.env.DEV && <span class="dev">dev</span>}</h1>
-				<div class="actions">
-					<button class="round" aria-label="设置" onClick={props.onSettings}>
+			<header className="topbar">
+				<h1>moco{import.meta.env.DEV && <span className="dev">dev</span>}</h1>
+				<div className="actions">
+					<button className="round" aria-label="设置" onClick={props.onSettings}>
 						<Settings size={20} />
 					</button>
-					<button class="round" aria-label="添加电脑" onClick={props.onAdd}>
+					<button className="round" aria-label="添加电脑" onClick={props.onAdd}>
 						<Plus size={20} />
 					</button>
 				</div>
 			</header>
-			<h2 class="section">电脑</h2>
-			<ul class="hosts">
+			<h2 className="section">电脑</h2>
+			<ul className="hosts">
 				{sorted.map(h => {
 					const live = connOf(h.id)?.state
 					const dot = live === 'open' ? 'open' : health[h.id] === 'online' ? 'online' : health[h.id] === 'offline' ? 'closed' : 'connecting'
 					const screen = loadScreen(h.id)
 					return (
-						<li key={h.id} class="host" onClick={() => props.onOpen(h)}>
-							<div class="thumb">{screen ? <img src={screen.image} alt="" /> : <span class="empty">还没打开过</span>}</div>
-							<div class="meta">
-								<span class="dot" data-state={dot} />
-								<span class="name">{h.name}</span>
+						<li key={h.id} className="host" onClick={() => props.onOpen(h)}>
+							<div className="thumb">{screen ? <img src={screen.image} alt="" /> : <span className="empty">还没打开过</span>}</div>
+							<div className="meta">
+								<span className="dot" data-state={dot} />
+								<span className="name">{h.name}</span>
 								<button
-									class="more"
+									className="more"
 									aria-label="删除"
 									onClick={e => {
 										e.stopPropagation()
@@ -125,7 +125,7 @@ function Home(props: {
 									<Ellipsis size={18} />
 								</button>
 							</div>
-							<div class="addr">{new URL(h.url).hostname}</div>
+							<div className="addr">{new URL(h.url).hostname}</div>
 						</li>
 					)
 				})}
@@ -149,52 +149,52 @@ function SettingsPage(props: { onBack: () => void }) {
 
 	return (
 		<main id="settings">
-			<header class="topbar">
-				<button class="round" aria-label="返回" onClick={props.onBack}>
+			<header className="topbar">
+				<button className="round" aria-label="返回" onClick={props.onBack}>
 					<ChevronLeft size={22} />
 				</button>
 				<h1>设置</h1>
 				<span />
 			</header>
-			<h2 class="section">终端文字</h2>
-			<div class="group">
-				<div class="row">
-					<Type size={20} class="lead" />
-					<span class="label">字号</span>
-					<span class="stepper">
+			<h2 className="section">终端文字</h2>
+			<div className="group">
+				<div className="row">
+					<Type size={20} className="lead" />
+					<span className="label">字号</span>
+					<span className="stepper">
 						<button aria-label="小一号" onClick={() => resize(size - 1)} disabled={size <= FONT_MIN}>
 							<Minus size={18} />
 						</button>
-						<span class="value">{size}</span>
+						<span className="value">{size}</span>
 						<button aria-label="大一号" onClick={() => resize(size + 1)} disabled={size >= FONT_MAX}>
 							<Plus size={18} />
 						</button>
 					</span>
 				</div>
 			</div>
-			<h2 class="section">字体</h2>
-			<div class="group">
+			<h2 className="section">字体</h2>
+			<div className="group">
 				{(Object.keys(FONTS) as FontKey[]).map(k => (
 					<button
 						key={k}
-						class="row"
+						className="row"
 						aria-pressed={font === k}
 						onClick={() => {
 							setFont(k)
 							setFontFamilyForAllSessions(k)
 						}}
 					>
-						<span class="label">{FONTS[k].label}</span>
-						{font === k && <Check size={20} class="check" />}
+						<span className="label">{FONTS[k].label}</span>
+						{font === k && <Check size={20} className="check" />}
 					</button>
 				))}
 			</div>
-			<h2 class="section">这台手机</h2>
-			<div class="group">
-				<div class="row">
-					<KeyRound size={20} class="lead" />
-					<span class="label">密钥指纹</span>
-					<span class="value mono">{fp}</span>
+			<h2 className="section">这台手机</h2>
+			<div className="group">
+				<div className="row">
+					<KeyRound size={20} className="lead" />
+					<span className="label">密钥指纹</span>
+					<span className="value mono">{fp}</span>
 				</div>
 			</div>
 		</main>
@@ -208,7 +208,7 @@ function Add(props: { initialUrl?: string; canCancel: boolean; onCancel: () => v
 	const [busy, setBusy] = useState(false)
 	const [error, setError] = useState('')
 
-	const submit = async (e: Event) => {
+	const submit = async (e: FormEvent) => {
 		e.preventDefault()
 		setError('')
 		if (!crypto.subtle) return setError('这个页面不是 HTTPS，浏览器不给生成密钥。请从 https 地址打开 moco。')
@@ -243,27 +243,27 @@ function Add(props: { initialUrl?: string; canCancel: boolean; onCancel: () => v
 
 	return (
 		<main id="add">
-			<header class="topbar">
-				{props.canCancel ? <button class="text" onClick={props.onCancel}>取消</button> : <span />}
+			<header className="topbar">
+				{props.canCancel ? <button className="text" onClick={props.onCancel}>取消</button> : <span />}
 				<h1>添加电脑</h1>
 				<span />
 			</header>
 			<form onSubmit={submit}>
-				<p class="hint">先在那台电脑上运行 <code>mocod pair</code>，它会显示一个 6 位配对码，5 分钟内有效。</p>
+				<p className="hint">先在那台电脑上运行 <code>mocod pair</code>，它会显示一个 6 位配对码，5 分钟内有效。</p>
 				<label>
 					地址
-					<input value={url} onInput={e => setUrl(e.currentTarget.value)} placeholder="my-mac.tailnet-name.ts.net" autocapitalize="off" autocorrect="off" spellcheck={false} inputMode="url" required />
+					<input value={url} onChange={e => setUrl(e.currentTarget.value)} placeholder="my-mac.tailnet-name.ts.net" autoCapitalize="off" autoCorrect="off" spellCheck={false} inputMode="url" required />
 				</label>
 				<label>
 					配对码
-					<input value={code} onInput={e => setCode(e.currentTarget.value)} placeholder="000 000" inputMode="numeric" autocomplete="one-time-code" required />
+					<input value={code} onChange={e => setCode(e.currentTarget.value)} placeholder="000 000" inputMode="numeric" autoComplete="one-time-code" required />
 				</label>
 				<label>
 					这台手机叫
-					<input value={device} onInput={e => setDevice(e.currentTarget.value)} required />
+					<input value={device} onChange={e => setDevice(e.currentTarget.value)} required />
 				</label>
-				{error && <p class="error">{error}</p>}
-				<button class="primary" type="submit" disabled={busy}>{busy ? '配对中…' : '配对'}</button>
+				{error && <p className="error">{error}</p>}
+				<button className="primary" type="submit" disabled={busy}>{busy ? '配对中…' : '配对'}</button>
 			</form>
 		</main>
 	)

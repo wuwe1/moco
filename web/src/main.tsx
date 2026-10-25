@@ -1,5 +1,5 @@
 import '@xterm/xterm/css/xterm.css'
-import { render } from 'preact'
+import { createRoot } from 'react-dom/client'
 import { App } from './app'
 import { loadFont } from './fonts'
 import { fontKey } from './store'
@@ -12,5 +12,5 @@ function retireServiceWorker() {
 	navigator.serviceWorker?.getRegistrations().then(rs => rs.forEach(r => r.update()))
 }
 
-loadFont(fontKey()).then(() => render(<App />, document.getElementById('root')!))
+loadFont(fontKey()).then(() => createRoot(document.getElementById('root')!).render(<App />))
 retireServiceWorker()

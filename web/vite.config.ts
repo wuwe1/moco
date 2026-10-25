@@ -1,10 +1,10 @@
-import preact from '@preact/preset-vite'
+import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 const mocod = 'http://127.0.0.1:7681'
 
 export default defineConfig({
-	plugins: [preact()],
+	plugins: [react()],
 	build: { target: 'safari16' },
 	server: {
 		host: '127.0.0.1',

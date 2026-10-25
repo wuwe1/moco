@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'preact/hooks'
+import { useEffect, useMemo, useRef } from 'react'
 
 const DOUBLE_TAP_MS = 280
 
@@ -18,14 +18,14 @@ export function Lightbox(props: { img: Picture; onClose: () => void }) {
 	const canShare = !!navigator.canShare?.({ files: [file] })
 
 	return (
-		<div class="lightbox">
-			<div class="stage" ref={stage}>
+		<div className="lightbox">
+			<div className="stage" ref={stage}>
 				<img ref={pic} src={url} width={img.w} height={img.h} alt="" />
 			</div>
-			<div class="lb-bar">
-				<span class="size">{img.w} × {img.h}</span>
-				{canShare && <button class="text" onClick={() => navigator.share({ files: [file] }).catch(() => {})}>分享</button>}
-				<button class="icon" aria-label="关闭" onClick={props.onClose}>×</button>
+			<div className="lb-bar">
+				<span className="size">{img.w} × {img.h}</span>
+				{canShare && <button className="text" onClick={() => navigator.share({ files: [file] }).catch(() => {})}>分享</button>}
+				<button className="icon" aria-label="关闭" onClick={props.onClose}>×</button>
 			</div>
 		</div>
 	)

@@ -1,5 +1,5 @@
 import type { Terminal } from '@xterm/xterm'
-import { ArrowRightToLine, ClipboardPaste, CornerDownLeft, ImagePlus, Move, type LucideIcon } from 'lucide-preact'
+import { ArrowRightToLine, ClipboardPaste, CornerDownLeft, ImagePlus, Move, type LucideIcon } from 'lucide-react'
 import { dlog } from './debug'
 
 // 框里常驻一个零宽字符：框是空的时候 iOS 不报删除，退格就发不出去

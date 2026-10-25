@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'preact/hooks'
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Conn, State } from './conn'
 import { debugLines, dlog, onDebug } from './debug'
-import { ArrowUp, Keyboard, KeyboardOff } from 'lucide-preact'
+import { ArrowUp, Keyboard, KeyboardOff } from 'lucide-react'
 import { KEYS, keyboard } from './keyboard'
 import { Lightbox, type Picture } from './lightbox'
 import { shrinkImage } from './shrink'
@@ -119,14 +119,14 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	}, [])
 
 	const grab = useRef({ y: 0, t: 0, active: false, onStatus: false })
-	const down = (e: PointerEvent) => {
+	const down = (e: ReactPointerEvent) => {
 		grab.current = { y: e.clientY, t: e.timeStamp, active: true, onStatus: !!(e.target as HTMLElement).closest('.status') }
 		;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
 	}
-	const move = (e: PointerEvent) => {
+	const move = (e: ReactPointerEvent) => {
 		if (grab.current.active) setDrag(Math.max(0, e.clientY - grab.current.y))
 	}
-	const up = (e: PointerEvent) => {
+	const up = (e: ReactPointerEvent) => {
 		if (!grab.current.active) return
 		grab.current.active = false
 		const dy = e.clientY - grab.current.y
@@ -152,25 +152,25 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		<div
 			id="sheet"
 			ref={root}
-			class={`${host ? 'open' : ''} ${drag ? 'dragging' : ''}`}
-			style={{ '--drag': `${drag}px` }}
+			className={`${host ? 'open' : ''} ${drag ? 'dragging' : ''}`}
+			style={{ '--drag': `${drag}px` } as CSSProperties}
 		>
 			<header id="grab" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
-				<span class="grabber" />
-				<span class="dot" data-state={state} />
-				<span class="title">{host?.name}</span>
-				<span class="status">{status(state, conn)}</span>
+				<span className="grabber" />
+				<span className="dot" data-state={state} />
+				<span className="title">{host?.name}</span>
+				<span className="status">{status(state, conn)}</span>
 			</header>
 			<div id="panes" ref={sessionMount} />
 			{debug && (
-				<pre class="debug" onClick={() => setDebug(false)}>
+				<pre className="debug" onClick={() => setDebug(false)}>
 					{debugLines().join('\n')}
 				</pre>
 			)}
 			{state === 'unauthorized' && host && (
-				<div class="notice">
+				<div className="notice">
 					<p>{host.name} 不认这台手机：还没配对，或者在电脑上被 <code>mocod revoke</code> 删掉了。</p>
-					<button class="primary" onClick={() => props.onRepair(host)}>重新配对</button>
+					<button className="primary" onClick={() => props.onRepair(host)}>重新配对</button>
 				</div>
 			)}
 			{pasting && (
@@ -182,7 +182,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 					onCancel={() => setPasting(false)}
 				/>
 			)}
-			{toast && <div class="toast">{toast}</div>}
+			{toast && <div className="toast">{toast}</div>}
 			<input
 				ref={picker}
 				type="file"
@@ -204,10 +204,10 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 				<textarea
 					id="input"
 					rows={1}
-					autocapitalize="off"
-					autocomplete="off"
-					autocorrect="off"
-					spellcheck={false}
+					autoCapitalize="off"
+					autoComplete="off"
+					autoCorrect="off"
+					spellCheck={false}
 					onFocus={() => {
 						dlog('输入框拿到焦点')
 						setTyping(true)
@@ -230,9 +230,9 @@ const TOAST_MS = 3000
 function keyButton(k: (typeof KEYS)[number]) {
 	const Icon = k.icon
 	return (
-		<button key={k.id} data-key={k.id} class={k.kind === 'dpad' ? 'dpad' : undefined} aria-label={k.label} aria-pressed={k.kind === 'ctrl' ? 'false' : undefined}>
-			{Icon && <Icon size={ICON_PX} class="face" />}
-			{k.kind === 'dpad' && <ArrowUp size={ICON_PX} class="aim" />}
+		<button key={k.id} data-key={k.id} className={k.kind === 'dpad' ? 'dpad' : undefined} aria-label={k.label} aria-pressed={k.kind === 'ctrl' ? 'false' : undefined}>
+			{Icon && <Icon size={ICON_PX} className="face" />}
+			{k.kind === 'dpad' && <ArrowUp size={ICON_PX} className="aim" />}
 			{!Icon && k.label}
 		</button>
 	)
@@ -242,7 +242,7 @@ function PasteBox(props: { onSend: (text: string) => void; onCancel: () => void 
 	const [text, setText] = useState('')
 	return (
 		<form
-			class="pastebox"
+			className="pastebox"
 			onSubmit={e => {
 				e.preventDefault()
 				if (text) props.onSend(text)
@@ -253,15 +253,15 @@ function PasteBox(props: { onSend: (text: string) => void; onCancel: () => void 
 				onInput={e => setText((e.target as HTMLTextAreaElement).value)}
 				placeholder="读不到剪贴板。长按这里选「粘贴」"
 				rows={4}
-				autocapitalize="off"
-				autocomplete="off"
-				autocorrect="off"
-				spellcheck={false}
+				autoCapitalize="off"
+				autoComplete="off"
+				autoCorrect="off"
+				spellCheck={false}
 			/>
-			<div class="row">
-				<span class="count">{text ? `${text.split('\n').length} 行` : ''}</span>
+			<div className="row">
+				<span className="count">{text ? `${text.split('\n').length} 行` : ''}</span>
 				<button type="button" onClick={props.onCancel}>取消</button>
-				<button type="submit" class="send" disabled={!text}>发送</button>
+				<button type="submit" className="send" disabled={!text}>发送</button>
 			</div>
 		</form>
 	)
