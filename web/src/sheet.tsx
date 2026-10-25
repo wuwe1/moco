@@ -1,11 +1,11 @@
 // 终端抽屉：从底部拉起盖住首页，顶上的把手往下拖就收回首页（连接不断）。
 // 按键栏、输入框只有一套，跟着当前打开的连接走
 import { useEffect, useRef, useState } from 'preact/hooks'
-import type { State } from './conn'
+import type { Conn, State } from './conn'
 import { debugLines, onDebug } from './debug'
 import { KEYS, keyboard } from './keyboard'
 import { Lightbox, type Picture } from './lightbox'
-import { onSessionsChange, session, stateOf, type Session } from './session'
+import { connOf, session, useSessions, type Session } from './session'
 import type { Host } from './store'
 
 const STATUS: Record<State, string> = {
@@ -16,8 +16,7 @@ const STATUS: Record<State, string> = {
 }
 
 // 断开时带上关闭码和已经重连了几次：1006 是网络层断的，4401 是没登记，4500 是电脑上的命令起不来
-function status(state: State, host?: Host) {
-	const c = host && session(host).conn
+function status(state: State, c?: Conn) {
 	if (state === 'closed' && c?.lastClose) return `已断开 ${c.lastClose}，第 ${c.retries} 次重连`
 	if (state === 'connecting' && c?.retries) return `连接中（上次 ${c.lastClose}，第 ${c.retries} 次）`
 	return STATUS[state]
@@ -35,11 +34,11 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	const [pasting, setPasting] = useState(false)
 	const [, bump] = useState(0)
 	useEffect(() => (debug ? onDebug(() => bump(n => n + 1)) : undefined), [debug])
+	useSessions()
 
 	// 按键栏、输入框只绑一次
 	useEffect(() => {
 		kb.current = keyboard(root.current!, () => current.current?.term, s => current.current?.conn.send(s), () => setPasting(true))
-		return onSessionsChange(() => bump(n => n + 1))
 	}, [])
 
 	// 换连接：旧的存一屏缩略图、藏起来，新的挂上
@@ -106,7 +105,8 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		}
 	}
 
-	const state = (host && stateOf(host.id)) || 'connecting'
+	const conn = host && connOf(host.id)
+	const state = conn?.state ?? 'connecting'
 	return (
 		<div
 			id="sheet"
@@ -118,7 +118,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 				<span class="grabber" />
 				<span class="dot" data-state={state} />
 				<span class="title">{host?.name}</span>
-				<span class="status">{status(state, host)}</span>
+				<span class="status">{status(state, conn)}</span>
 			</header>
 			{/* 终端节点由 Session 自己挂进来，这里不放 Preact 管的子节点 */}
 			<div id="panes" ref={panes} />

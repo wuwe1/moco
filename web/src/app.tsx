@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'preact/hooks'
 import { deviceKey, fingerprint } from './keys'
-import { dropSession, onSessionsChange, stateOf } from './session'
+import { connOf, dropSession, useSessions } from './session'
 import { Sheet } from './sheet'
-import { dropScreen, loadHosts, loadScreen, normalizeUrl, saveHosts, type Host } from './store'
+import { deviceName, dropScreen, loadHosts, loadScreen, normalizeUrl, saveHosts, setDeviceName, type Host } from './store'
 
 type Health = 'checking' | 'online' | 'offline'
 
@@ -79,8 +79,7 @@ function useHealth(hosts: Host[]) {
 function Home(props: { hosts: Host[]; hidden: boolean; onOpen: (h: Host) => void; onAdd: () => void; onRemove: (h: Host) => void }) {
 	const health = useHealth(props.hosts)
 	const [fp, setFp] = useState('')
-	const [, bump] = useState(0)
-	useEffect(() => onSessionsChange(() => bump(n => n + 1)), [])
+	useSessions()
 	useEffect(() => {
 		fingerprint().then(setFp, () => setFp(''))
 	}, [])
@@ -94,7 +93,7 @@ function Home(props: { hosts: Host[]; hidden: boolean; onOpen: (h: Host) => void
 			</header>
 			<ul class="hosts">
 				{sorted.map(h => {
-					const live = stateOf(h.id)
+					const live = connOf(h.id)?.state
 					const dot = live === 'open' ? 'open' : health[h.id] === 'online' ? 'online' : health[h.id] === 'offline' ? 'closed' : 'connecting'
 					const screen = loadScreen(h.id)
 					return (
@@ -133,7 +132,7 @@ function Home(props: { hosts: Host[]; hidden: boolean; onOpen: (h: Host) => void
 function Add(props: { initialUrl?: string; canCancel: boolean; onCancel: () => void; onAdded: (h: Host) => void }) {
 	const [url, setUrl] = useState(props.initialUrl ?? (location.protocol === 'https:' ? location.host : ''))
 	const [code, setCode] = useState('')
-	const [device, setDevice] = useState(localStorage.getItem('moco.deviceName') ?? 'iPhone')
+	const [device, setDevice] = useState(deviceName)
 	const [busy, setBusy] = useState(false)
 	const [error, setError] = useState('')
 
@@ -161,7 +160,7 @@ function Add(props: { initialUrl?: string; canCancel: boolean; onCancel: () => v
 				setError(res.status === 403 ? '配对码不对或已过期：在电脑上重新运行 mocod pair。' : `配对失败：${body.error ?? res.status}`)
 				return
 			}
-			localStorage.setItem('moco.deviceName', device)
+			setDeviceName(device)
 			props.onAdded({ id: crypto.randomUUID(), name: body.name, url: base, added: Date.now() })
 		} catch {
 			setError(`连不上 ${url}：确认电脑上 mocod 在运行，手机开着 Tailscale。`)

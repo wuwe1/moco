@@ -4,7 +4,8 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { UnicodeGraphemesAddon } from '@xterm/addon-unicode-graphemes'
 import { Terminal } from '@xterm/xterm'
-import { Conn, type State } from './conn'
+import { useEffect, useState } from 'preact/hooks'
+import { Conn } from './conn'
 import { theme } from './theme'
 import { dlog } from './debug'
 import { gestures } from './gestures'
@@ -12,11 +13,19 @@ import { locate } from './grid'
 import { ImageLayer } from './images'
 import { fontSize, saveScreen, setFontSize, type Host } from './store'
 
-
 const sessions = new Map<string, Session>()
 const listeners = new Set<() => void>()
-export const onSessionsChange = (fn: () => void) => (listeners.add(fn), () => listeners.delete(fn))
 const changed = () => listeners.forEach(fn => fn())
+
+// 组件里用：哪个连接的状态变了就重画
+export function useSessions() {
+	const [, bump] = useState(0)
+	useEffect(() => {
+		const fn = () => bump(n => n + 1)
+		listeners.add(fn)
+		return () => void listeners.delete(fn)
+	}, [])
+}
 
 export function session(host: Host): Session {
 	let s = sessions.get(host.id)
@@ -27,16 +36,13 @@ export function session(host: Host): Session {
 	return s
 }
 
-export const stateOf = (id: string): State | undefined => sessions.get(id)?.conn.state
+// 只查不建：没打开过的连接没有
+export const connOf = (id: string): Conn | undefined => sessions.get(id)?.conn
 
 export function dropSession(id: string) {
 	sessions.get(id)?.dispose()
 	sessions.delete(id)
 	changed()
-}
-
-export function forEachSession(fn: (s: Session) => void) {
-	sessions.forEach(fn)
 }
 
 export class Session {
