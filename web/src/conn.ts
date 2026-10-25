@@ -2,8 +2,8 @@ import type { Terminal } from '@xterm/xterm'
 import { dlog, logTo } from './debug'
 import type { ImageLayer, Placement } from './images'
 import { deviceKey, signChallenge } from './keys'
-import type { Host } from './store'
-import { wireTheme } from './theme'
+import { currentTheme, type Host } from './store'
+import { wireTheme } from './themes'
 
 export type State = 'connecting' | 'open' | 'closed' | 'unauthorized'
 
@@ -101,7 +101,7 @@ export class Conn {
 			dlog(`WebSocket 打开，协议 ${ws.protocol || '无'}`)
 			try {
 				const { pub } = await deviceKey()
-				ws.send(JSON.stringify({ type: 'hello', key: pub, cols: this.term.cols, rows: this.term.rows, theme: wireTheme, cell: this.images.cellSize() }))
+				ws.send(JSON.stringify({ type: 'hello', key: pub, cols: this.term.cols, rows: this.term.rows, theme: wireTheme(currentTheme()), cell: this.images.cellSize() }))
 			} catch (e) {
 				dlog(`取设备密钥失败：${e}`)
 			}
@@ -230,6 +230,6 @@ export class Conn {
 	}
 
 	resize(cols: number, rows: number) {
-		if (this.state === 'open') this.ws?.send(frame(RESIZE, JSON.stringify({ cols, rows, cell: this.images.cellSize() })))
+		if (this.state === 'open') this.ws?.send(frame(RESIZE, JSON.stringify({ cols, rows, cell: this.images.cellSize(), theme: wireTheme(currentTheme()) })))
 	}
 }

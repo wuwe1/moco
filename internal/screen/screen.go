@@ -63,6 +63,8 @@ type Screen struct {
 	sentAny            bool
 	sentImages         map[uint32]bool
 
+	cursorByProgram bool // 程序设过光标样式（CSI Ps SP q，Ps 不是 0）
+
 	k *kitty // 图片（kitty 图形协议）
 
 	cellW, cellH int // 手机上一格多少 CSS 像素；0 表示不知道
@@ -89,8 +91,23 @@ func New(cols, rows int, theme Theme, respond io.Writer) *Screen {
 	s.e.RegisterOscHandler(4, s.oscPalette)
 	s.e.RegisterApcHandler(func(data []byte) bool { return s.k.handle(data, s.e.CursorPosition()) })
 	s.e.RegisterCsiHandler('t', s.windowOps)
+	s.e.RegisterCsiHandler(ansi.Command(0, ' ', 'q'), s.cursorStyleSet)
 	go io.Copy(respond, s.e)
 	return s
+}
+
+// SetTheme 换配色：手机上改了主题，之后的颜色查询按新的回答
+func (s *Screen) SetTheme(t Theme) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.setTheme(t)
+}
+
+// 只记下程序有没有自己设光标样式，样式本身交给模拟器（返回 false 让它接着处理）
+func (s *Screen) cursorStyleSet(params ansi.Params) bool {
+	n, _, _ := params.Param(0, 0)
+	s.cursorByProgram = n != 0
+	return false
 }
 
 func (s *Screen) setTheme(t Theme) {
@@ -235,7 +252,10 @@ func (s *Screen) Frame() (*Frame, time.Duration) {
 
 	pos := s.e.CursorPosition()
 	hidden := s.e.CursorHidden()
-	style := cursorStyle(s.e.CursorStyle())
+	style := "\x1b[0 q" // 恢复成手机设置里的样式
+	if s.cursorByProgram {
+		style = cursorStyle(s.e.CursorStyle())
+	}
 	if changed || full || pos != s.sentCursor {
 		fmt.Fprintf(&b, "\x1b[%d;%dH", pos.Y+1, pos.X+1)
 		changed = true

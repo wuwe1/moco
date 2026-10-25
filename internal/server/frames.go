@@ -205,11 +205,15 @@ func (s *Server) pumpFrames(ctx context.Context, c *websocket.Conn, sess *term.S
 		case 1:
 			var sz struct {
 				Cols, Rows uint16
-				Cell       *cellSize // 改字号时一格的大小也变了
+				Cell       *cellSize     // 改字号时一格的大小也变了
+				Theme      *screen.Theme // 换了主题
 			}
 			if json.Unmarshal(data[1:], &sz) == nil && sz.Cols > 0 && sz.Rows > 0 {
 				if sz.Cell != nil {
 					scr.SetCellSize(sz.Cell.W, sz.Cell.H)
+				}
+				if sz.Theme != nil {
+					scr.SetTheme(*sz.Theme)
 				}
 				sess.Resize(sz.Cols, sz.Rows)
 				scr.Resize(int(sz.Cols), int(sz.Rows))

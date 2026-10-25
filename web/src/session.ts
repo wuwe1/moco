@@ -3,13 +3,13 @@ import { UnicodeGraphemesAddon } from '@xterm/addon-unicode-graphemes'
 import { Terminal } from '@xterm/xterm'
 import { useEffect, useState } from 'react'
 import { Conn } from './conn'
-import { theme } from './theme'
+import { xtermTheme } from './themes'
 import { dlog } from './debug'
 import { gestures } from './gestures'
 import { grid, locate } from './grid'
 import { renderThumbnail } from './thumbnail'
 import { ImageLayer } from './images'
-import { fontKey, fontSize, saveScreen, setFontKey, setFontSize, type Host } from './store'
+import { currentTheme, fontKey, fontSize, saveScreen, setFontKey, setFontSize, termPrefs, type Host } from './store'
 import { fontStack, loadFont, type FontKey } from './fonts'
 
 const sessions = new Map<string, Session>()
@@ -58,10 +58,9 @@ export class Session {
 		this.term = new Terminal({
 			fontFamily: fontStack(fontKey()),
 			fontSize: fontSize(),
-			theme,
+			...lookOptions(),
 			// 不留本地回滚：滚动都交给 herdr；留了 fit 会在右边给滚动条让出 14px
 			scrollback: 0,
-			cursorBlink: false,
 			// 字宽插件还在 proposed API 里
 			allowProposedApi: true,
 		})
@@ -93,8 +92,15 @@ export class Session {
 		if (this.el.parentElement !== parent) parent.appendChild(this.el)
 		this.el.hidden = false
 		this.openOnFirstAttach()
+		this.showAsFocused(true)
 		this.fitNow()
 		if (this.conn.state === 'closed') this.conn.connect()
+	}
+
+	// 键盘走的是 sheet 里自己的输入框，xterm 自己的 textarea 从不真的拿焦点；xterm 只听那个 textarea 的 focus/blur
+	// 判断有没有焦点，没焦点时光标一律画成空心框，光标样式、闪烁、程序设的光标形状都不生效。只发事件、不真 focus
+	private showAsFocused(on: boolean) {
+		this.term.textarea?.dispatchEvent(new FocusEvent(on ? 'focus' : 'blur'))
 	}
 
 	private openOnFirstAttach() {
@@ -136,6 +142,7 @@ export class Session {
 	detach() {
 		dlog(`收起 ${this.host.name}，连接状态 ${this.conn.state}`)
 		this.snapshot()
+		this.showAsFocused(false)
 		this.el.hidden = true
 	}
 
@@ -215,5 +222,19 @@ export async function setFontFamilyForAllSessions(k: FontKey) {
 	sessions.forEach(s => {
 		s.term.options.fontFamily = fontStack(k)
 		s.fitNow()
+	})
+}
+
+// 主题、光标、粗体的设置：新开的终端照它建，设置改了所有终端一起换；配色也告诉 mocod（跟着改尺寸的消息走）
+const lookOptions = () => {
+	const p = termPrefs()
+	return { theme: xtermTheme(currentTheme()), cursorStyle: p.cursorStyle, cursorBlink: p.cursorBlink, drawBoldTextInBrightColors: p.boldBright }
+}
+
+export function applyLookToAllSessions() {
+	const look = lookOptions()
+	sessions.forEach(s => {
+		Object.assign(s.term.options, look)
+		s.conn.resize(s.term.cols, s.term.rows)
 	})
 }

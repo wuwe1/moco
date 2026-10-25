@@ -1,21 +1,22 @@
 import type { IBufferCell, Terminal } from '@xterm/xterm'
 import { grid } from './grid'
-import { wireTheme } from './theme'
+import { currentTheme } from './store'
+import type { Theme } from './themes'
 
 const WIDTH_PX = 240
 const PIXEL_RATIO = 2
 
 const LEVELS = [0, 95, 135, 175, 215, 255]
 const hex = (r: number, g: number, b: number) => `rgb(${r},${g},${b})`
-const palette = (i: number) => {
-	if (i < 16) return wireTheme.palette[i]
+const palette = (i: number, theme: Theme) => {
+	if (i < 16) return theme.ansi[i]
 	if (i < 232) return hex(LEVELS[Math.floor((i - 16) / 36)], LEVELS[Math.floor((i - 16) / 6) % 6], LEVELS[(i - 16) % 6])
 	const v = 8 + (i - 232) * 10
 	return hex(v, v, v)
 }
 const rgb = (n: number) => hex((n >> 16) & 255, (n >> 8) & 255, n & 255)
-const fgOf = (c: IBufferCell) => (c.isFgRGB() ? rgb(c.getFgColor()) : c.isFgPalette() ? palette(c.getFgColor()) : wireTheme.fg)
-const bgOf = (c: IBufferCell) => (c.isBgRGB() ? rgb(c.getBgColor()) : c.isBgPalette() ? palette(c.getBgColor()) : wireTheme.bg)
+const fgOf = (c: IBufferCell, th: Theme) => (c.isFgRGB() ? rgb(c.getFgColor()) : c.isFgPalette() ? palette(c.getFgColor(), th) : th.foreground)
+const bgOf = (c: IBufferCell, th: Theme) => (c.isBgRGB() ? rgb(c.getBgColor()) : c.isBgPalette() ? palette(c.getBgColor(), th) : th.background)
 
 export function renderThumbnail(term: Terminal): string | undefined {
 	const g = grid(term)
@@ -28,7 +29,8 @@ export function renderThumbnail(term: Terminal): string | undefined {
 	canvas.height = Math.ceil(rows * ch * PIXEL_RATIO)
 	const ctx = canvas.getContext('2d')!
 	ctx.scale(PIXEL_RATIO, PIXEL_RATIO)
-	ctx.fillStyle = wireTheme.bg
+	const theme = currentTheme()
+	ctx.fillStyle = theme.background
 	ctx.fillRect(0, 0, WIDTH_PX, rows * ch)
 	ctx.textBaseline = 'middle'
 	const size = (term.options.fontSize ?? 13) * (cw / g.cw)
@@ -42,10 +44,10 @@ export function renderThumbnail(term: Terminal): string | undefined {
 			line.getCell(x, cell)
 			const w = cell.getWidth()
 			if (!w) continue
-			let fg = fgOf(cell)
-			let bg = bgOf(cell)
+			let fg = fgOf(cell, theme)
+			let bg = bgOf(cell, theme)
 			if (cell.isInverse()) [fg, bg] = [bg, fg]
-			if (bg !== wireTheme.bg) {
+			if (bg !== theme.background) {
 				ctx.fillStyle = bg
 				ctx.fillRect(x * cw, y * ch, w * cw, ch)
 			}

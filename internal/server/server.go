@@ -6,7 +6,7 @@
 //	mocod → {type:"challenge", nonce, name}      nonce、签名都是 base64url
 //	手机 → {type:"auth", sig}                    对 auth.Message(name, nonce) 的 Ed25519 签名
 //	mocod → {type:"ready", name}                 之后开终端
-//	之后二进制帧第一个字节是类型：手机发 0=输入、1=改大小（JSON {cols,rows}）；
+//	之后二进制帧第一个字节是类型：手机发 0=输入、1=改大小（JSON {cols,rows,cell?,theme?}，换了主题也走这条）；
 //	v1：mocod 发 0=终端的原始输出。
 //	v2：mocod 发 2=一帧（见 frames.go），手机画完回 3=确认（4 字节序号）。
 //	命令退出时 mocod 发 {type:"exit", code} 再关连接

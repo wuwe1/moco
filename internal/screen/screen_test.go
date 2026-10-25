@@ -163,6 +163,43 @@ func TestAnswersColorQueries(t *testing.T) {
 	}
 }
 
+// 中途换配色：之后的颜色查询按新配色回答
+func TestSetThemeAnswersWithNewColors(t *testing.T) {
+	out := &buf{}
+	s := New(20, 6, Theme{Fg: "#ebdbb2", Bg: "#282828"}, out)
+	defer s.Close()
+	s.SetTheme(Theme{Fg: "#4c4f69", Bg: "#eff1f5", Palette: []string{"#5c5f77", "#d20f39"}})
+	s.Write([]byte("\x1b]11;?\x1b\\\x1b]4;1;?\x1b\\"))
+	deadline := time.Now().Add(time.Second)
+	for !strings.Contains(out.String(), "4;1;") && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	got := out.String()
+	for _, want := range []string{"11;rgb:efef/f1f1/f5f5", "4;1;rgb:d2d2/0f0f/3939"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %q", want, got)
+		}
+	}
+}
+
+// 程序没设过光标样式时发 CSI 0 SP q，手机用自己设置里的样式；程序设了才照发
+func TestCursorStyleOnlyWhenProgramSetsIt(t *testing.T) {
+	s := New(20, 4, Theme{}, io.Discard)
+	defer s.Close()
+	s.Write([]byte("x"))
+	if f := string(frame(t, s)); !strings.Contains(f, "\x1b[0 q") {
+		t.Fatalf("default cursor must defer to the phone: %q", f)
+	}
+	s.Write([]byte("\x1b[5 q"))
+	if f := string(frame(t, s)); !strings.Contains(f, "\x1b[5 q") {
+		t.Fatalf("program's bar cursor not forwarded: %q", f)
+	}
+	s.Write([]byte("\x1b[0 q"))
+	if f := string(frame(t, s)); !strings.Contains(f, "\x1b[0 q") {
+		t.Fatalf("reset not forwarded: %q", f)
+	}
+}
+
 // 改了尺寸整屏重发
 func TestResizeRepaintsAll(t *testing.T) {
 	s := New(20, 4, Theme{}, io.Discard)

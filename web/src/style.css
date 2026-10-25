@@ -1,21 +1,21 @@
 :root {
-	--bg: #1d2021;
 	--term: #282828;
-	--surface: #282828;
-	--line: #32302f;
-	--key: #3c3836;
-	--key-on: #504945;
 	--fg: #ebdbb2;
-	--dim: #928374;
 	--ok: #b8bb26;
 	--wait: #fabd2f;
 	--down: #fb4934;
-	--accent: #83a598;
+	--bg: color-mix(in srgb, var(--term) 78%, black);
+	--surface: var(--term);
+	--line: color-mix(in srgb, var(--term) 90%, var(--fg));
+	--key: color-mix(in srgb, var(--term) 84%, var(--fg));
+	--key-on: color-mix(in srgb, var(--term) 72%, var(--fg));
+	--dim: color-mix(in srgb, var(--fg) 58%, var(--term));
 	--sans: -apple-system, system-ui, sans-serif;
 	--mono: ui-monospace, 'SF Mono', Menlo, monospace;
 	--ease: cubic-bezier(.32, .72, 0, 1);
 	color-scheme: dark;
 }
+:root[data-mode="light"] { --bg: color-mix(in srgb, var(--term) 94%, black); }
 
 /* 整页钉死：不回弹、不被拖动、不缩放（iOS 不认 user-scalable=no，靠 touch-action 和手势拦截） */
 html, body {

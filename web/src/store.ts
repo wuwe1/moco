@@ -1,4 +1,5 @@
 import { isFontKey, type FontKey } from './fonts'
+import { BUILTIN, type Theme } from './themes'
 
 export type Host = {
 	id: string
@@ -14,6 +15,9 @@ const HOSTS = 'moco.hosts'
 const FONT = 'moco.fontSize'
 const DEVICE = 'moco.deviceName'
 const FONT_FAMILY = 'moco.fontFamily'
+const THEME = 'moco.theme'
+const CUSTOM_THEMES = 'moco.customThemes'
+const TERM_PREFS = 'moco.termPrefs'
 const screenKey = (id: string) => `moco.screen.${id}`
 
 export function loadHosts(): Host[] {
@@ -68,3 +72,27 @@ export function normalizeUrl(input: string): string {
 	const u = new URL(s)
 	return `${u.protocol}//${u.host}`
 }
+
+const readJSON = <T>(key: string, fallback: T): T => {
+	try {
+		return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback
+	} catch {
+		return fallback
+	}
+}
+
+export const customThemes = (): Theme[] =>
+	readJSON<Theme[]>(CUSTOM_THEMES, []).filter(t => t && typeof t.id === 'string' && Array.isArray(t.ansi) && t.ansi.length === 16)
+export const saveCustomThemes = (list: Theme[]) => localStorage.setItem(CUSTOM_THEMES, JSON.stringify(list))
+export const allThemes = () => [...BUILTIN, ...customThemes()]
+export const currentTheme = (): Theme => {
+	const id = localStorage.getItem(THEME)
+	return allThemes().find(t => t.id === id) ?? BUILTIN[0]
+}
+export const setThemeId = (id: string) => localStorage.setItem(THEME, id)
+
+export type CursorStyle = 'block' | 'underline' | 'bar'
+export type TermPrefs = { cursorStyle: CursorStyle; cursorBlink: boolean; boldBright: boolean }
+const DEFAULT_PREFS: TermPrefs = { cursorStyle: 'block', cursorBlink: false, boldBright: true }
+export const termPrefs = (): TermPrefs => ({ ...DEFAULT_PREFS, ...readJSON<Partial<TermPrefs>>(TERM_PREFS, {}) })
+export const setTermPrefs = (p: TermPrefs) => localStorage.setItem(TERM_PREFS, JSON.stringify(p))
