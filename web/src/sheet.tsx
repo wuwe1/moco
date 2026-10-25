@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type { State } from './conn'
 import { debugLines, onDebug } from './debug'
-import { keyboard } from './keyboard'
+import { KEYS, keyboard } from './keyboard'
 import { Lightbox, type Picture } from './lightbox'
 import { onSessionsChange, session, stateOf, type Session } from './session'
 import type { Host } from './store'
@@ -145,17 +145,11 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 			<div id="compose" hidden />
 			<div id="bar">
 				<div id="keys">
-					<button data-key="esc">Esc</button>
-					<button data-key="tab">Tab</button>
-					<button data-key="ctrl" aria-pressed="false">Ctrl</button>
-					<button data-key="^c">^C</button>
-					<button data-key="^b">^B</button>
-					<button data-key="left" data-repeat>←</button>
-					<button data-key="up" data-repeat>↑</button>
-					<button data-key="down" data-repeat>↓</button>
-					<button data-key="right" data-repeat>→</button>
-					<button data-key="enter">⏎</button>
-					<button data-key="paste">粘贴</button>
+					{KEYS.map(k => (
+						<button key={k.id} data-key={k.id} aria-pressed={k.id === 'ctrl' ? 'false' : undefined}>
+							{k.label}
+						</button>
+					))}
 				</div>
 				<button id="kbd" aria-label="键盘">⌨</button>
 				<textarea id="input" rows={1} autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck={false} />
