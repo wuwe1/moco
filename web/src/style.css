@@ -413,3 +413,4 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 	padding: env(safe-area-inset-top) 8px 0 16px;
 }
 .lb-bar .size { flex: 1; color: var(--muted); font: 12px var(--mono); }
+.topbar h1 .dev { margin-left: 6px; color: var(--wait); font: 500 12px var(--mono); vertical-align: middle; }

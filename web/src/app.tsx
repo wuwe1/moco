@@ -86,7 +86,7 @@ function Home(props: { hosts: Host[]; hidden: boolean; onOpen: (h: Host) => void
 	return (
 		<main id="home" hidden={props.hidden}>
 			<header class="topbar">
-				<h1>moco</h1>
+				<h1>moco{import.meta.env.DEV && <span class="dev">dev</span>}</h1>
 				<button class="icon" aria-label="添加电脑" onClick={props.onAdd}>＋</button>
 			</header>
 			<ul class="hosts">

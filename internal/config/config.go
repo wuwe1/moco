@@ -19,7 +19,6 @@ type Config struct {
 	Origins []string `json:"origins"` // 允许的网页来源（主机名，可用 * 通配）；同源总是允许
 	Command []string `json:"command"` // 每条连接开的命令，经登录 shell 启动
 	Web     string   `json:"web"`     // 可选：同时提供这个目录下的网页
-	Dev     string   `json:"dev"`     // 可选：网页请求先转给这个地址（Vite 开发服务），连不上再用 Web
 }
 
 type Device struct {

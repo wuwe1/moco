@@ -68,7 +68,6 @@ func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	fs.StringVar(&cfg.Listen, "listen", cfg.Listen, "监听地址")
 	fs.StringVar(&cfg.Web, "web", cfg.Web, "同时提供这个目录下的网页")
-	fs.StringVar(&cfg.Dev, "dev", cfg.Dev, "网页请求先转给这个地址（Vite 开发服务），连不上再用 -web")
 	fs.Parse(args)
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
