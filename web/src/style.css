@@ -156,22 +156,10 @@ button.icon { font-size: 22px; font-weight: 300; }
 .meta .more { background: none; color: var(--muted); min-width: 36px; font-size: 18px; }
 
 .device {
-	display: grid;
-	gap: 10px;
-	justify-items: center;
 	padding: 8px 16px 16px;
 	color: var(--muted);
 	font: 11px var(--mono);
 	text-align: center;
-}
-.kbmode { display: flex; align-items: center; gap: 8px; font: 13px var(--sans); }
-.kbmode select {
-	font: 16px var(--sans);
-	color: var(--fg);
-	background: var(--key);
-	border: 0;
-	border-radius: 7px;
-	padding: 4px 8px;
 }
 
 #add form {
@@ -290,7 +278,6 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 .pane .xterm-rows .xterm-dim:is([style^="color"], [style*=";color"], [style*="; color"]) {
 	-webkit-text-fill-color: color-mix(in srgb, currentColor 50%, transparent);
 }
-.pane .frozen { position: absolute; z-index: 10; background: var(--term); }
 .pane.offline { opacity: .5; }
 .pane .xterm { height: 100%; }
 .pane .images { position: absolute; z-index: 9; pointer-events: none; }
@@ -346,22 +333,18 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 	position: relative;
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	padding: 6px 6px calc(6px + var(--safe-bottom, env(safe-area-inset-bottom)));
+	gap: 4px;
+	padding: 6px 4px calc(6px + var(--safe-bottom, env(safe-area-inset-bottom)));
 	background: var(--bg);
 	border-top: 1px solid var(--line);
 }
-#keys {
-	flex: 1;
-	min-width: 0;
-	display: flex;
-	gap: 6px;
-	overflow-x: auto;
-	touch-action: pan-x;
-	scrollbar-width: none;
-}
-#keys::-webkit-scrollbar { display: none; }
-#bar button { display: inline-flex; align-items: center; justify-content: center; }
+#bar button { flex: 1 1 0; min-width: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+#bar .dpad { touch-action: none; }
+.dpad .aim, .dpad[data-dir] .face { display: none; }
+.dpad[data-dir] .aim { display: block; }
+.dpad[data-dir="right"] .aim { transform: rotate(90deg); }
+.dpad[data-dir="down"] .aim { transform: rotate(180deg); }
+.dpad[data-dir="left"] .aim { transform: rotate(270deg); }
 
 /* 真正接收键盘的输入框：看不见，但能拿到焦点、能跑输入法；16px 防止 iOS 聚焦时放大 */
 #input {

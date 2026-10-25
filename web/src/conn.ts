@@ -57,8 +57,6 @@ export class Conn {
 	retries = 0
 	private placementsOnNextFrame?: Placement[]
 	private unlog = () => {}
-	onFrameDrawn = () => {}
-	private resizedAt = 0
 	private uploadSeq = 0
 	private uploads = new Map<number, { resolve: (path: string) => void; reject: (e: Error) => void }>()
 
@@ -191,14 +189,7 @@ export class Conn {
 			dlog(`丢掉 ${cols}×${rows} 的一帧（现在 ${this.term.cols}×${this.term.rows}）`)
 			return ack()
 		}
-		this.term.write(this.frameDecoder.decode(body), () => {
-			if (this.resizedAt) {
-				dlog(`${cols}×${rows} 的第一帧：改大小后 ${Math.round(performance.now() - this.resizedAt)}ms 画上`)
-				this.resizedAt = 0
-			}
-			ack()
-			this.onFrameDrawn()
-		})
+		this.term.write(this.frameDecoder.decode(body), ack)
 	}
 
 	private wake(stale: boolean) {
@@ -239,7 +230,6 @@ export class Conn {
 	}
 
 	resize(cols: number, rows: number) {
-		this.resizedAt = performance.now()
 		if (this.state === 'open') this.ws?.send(frame(RESIZE, JSON.stringify({ cols, rows, cell: this.images.cellSize() })))
 	}
 }

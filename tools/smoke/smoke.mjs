@@ -72,7 +72,7 @@ const keyButton = k => page.locator(`#bar [data-key="${k}"]`)
 const key = k => keyButton(k).tap()
 let cdp
 // 一根手指：在 from 按下，按住 holdMs，沿 moves（相对 from 的位移）挪过去，再松开
-const touch = async (from, { holdMs = 0, moves = [] } = {}) => {
+const touch = async (from, { holdMs = 0, moves = [], thenHoldMs = 0 } = {}) => {
 	cdp ??= await ctx.newCDPSession(page)
 	const send = (type, p) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: p ? [p] : [] })
 	await send('touchStart', from)
@@ -81,6 +81,7 @@ const touch = async (from, { holdMs = 0, moves = [] } = {}) => {
 		await send('touchMove', { x: from.x + dx, y: from.y + dy })
 		await sleep(16)
 	}
+	await sleep(thenHoldMs)
 	await send('touchEnd')
 }
 const center = async loc => {
@@ -102,7 +103,6 @@ const redPixel = () => page.evaluate(() => {
 })
 const rows = () => page.evaluate(() => document.querySelector('.pane:not([hidden]) .xterm-rows').children.length)
 const keyboardUp = px => page.evaluate(px => window.__keyboard(px), px)
-const setMode = m => page.evaluate(m => localStorage.setItem('moco.keyboardMode', m), m)
 // 提示符那一行（最后一行有字的）在终端区域里看得见
 const cursorShown = () => page.evaluate(() => {
 	const lines = [...document.querySelector('.pane:not([hidden]) .xterm-rows').children]
@@ -138,8 +138,8 @@ try {
 		await page.keyboard.press('Enter')
 		await until(async () => count(await screenText(), 'hi3') === 1, 'hi3')
 	})
-	await check('按键栏 ↑ ⏎', async () => {
-		await key('up')
+	await check('方向盘往上拖一下：发一次 ↑', async () => {
+		await touch(await center(keyButton('dpad')), { moves: [[0, -6], [0, -15], [0, -20]] })
 		await key('enter')
 		await until(async () => count(await screenText(), 'hi3') === 2, '第二个 hi3')
 	})
@@ -175,15 +175,6 @@ try {
 		await page.keyboard.press('Enter')
 		await until(async () => count(await screenText(), 'pasted16') === 2, '第二个 pasted16')
 	})
-	await check('按住 ← 连发', async () => {
-		await page.keyboard.type('echo abcdefghijklmnop')
-		await touch(await center(keyButton('left')), { holdMs: 700 })
-		await page.keyboard.type('X')
-		await page.keyboard.press('Enter')
-		await until(async () => /[a-p]+X[a-p]+/.test(await screenText()), '输出里有 X')
-		const out = (await screenText()).match(/\s([a-p]+X[a-p]+)/)[1]
-		if (out.length - out.indexOf('X') - 1 < 3) throw new Error(`只往左挪了 ${out.length - out.indexOf('X') - 1} 格：${out}`)
-	})
 	await check('按下滑走再松手：不发', async () => {
 		await page.keyboard.type('echo slid$((5*5))')
 		await touch(await center(keyButton('enter')), { moves: [[0, -20], [0, -50], [0, -80]] })
@@ -192,14 +183,36 @@ try {
 		await page.keyboard.press('Enter')
 		await until(async () => (await screenText()).includes('slid25'), 'slid25')
 	})
-	await check('按在键上横着划按键栏：不发', async () => {
-		await page.keyboard.type('echo ab')
-		await touch(await center(keyButton('left')), { moves: [[-20, 0], [-50, 0], [-90, 0], [-130, 0]] })
-		await sleep(300)
-		await page.keyboard.type('Z')
+	const leftOf = async (moves, thenHoldMs) => {
+		await page.keyboard.type('echo abcdefghijklmnop')
+		await touch(await center(keyButton('dpad')), { moves, thenHoldMs })
+		await page.keyboard.type('X')
 		await page.keyboard.press('Enter')
-		await until(async () => { const t = await screenText(); return count(t, 'abZ') + count(t, 'aZb') >= 2 }, '输出')
-		if (count(await screenText(), 'aZb')) throw new Error('划动时发了方向键')
+		await until(async () => /\s[a-p]*X[a-p]*\s/.test((await screenText()).split('echo ').pop()), '输出')
+		const out = (await screenText()).split('echo ').pop().match(/\s([a-p]*X[a-p]*)\s/)[1]
+		await page.keyboard.type('clear')
+		await page.keyboard.press('Enter')
+		return out.length - out.indexOf('X') - 1
+	}
+	await check('方向盘只点不拖：不发', async () => {
+		const n = await leftOf([], 0)
+		if (n !== 0) throw new Error(`发了 ${n} 个 ←`)
+	})
+	await check('方向盘往左拖远按住：连发', async () => {
+		const n = await leftOf([[-15, 0], [-50, 0]], 500)
+		if (n < 4) throw new Error(`只发了 ${n} 个 ←`)
+	})
+	await check('方向盘拖回中间：停', async () => {
+		const n = await leftOf([[-15, 0], [-3, 0]], 600)
+		if (n !== 1) throw new Error(`发了 ${n} 个 ←，应该只有 1 个`)
+	})
+	await check('按键栏一行排得下', async () => {
+		const r = await page.evaluate(() => {
+			const bar = document.querySelector('#bar').getBoundingClientRect()
+			const bs = [...document.querySelectorAll('#bar button')].map(b => b.getBoundingClientRect())
+			return { n: bs.length, rows: new Set(bs.map(b => Math.round(b.top))).size, out: bs.filter(b => b.right > bar.right || b.left < bar.left).length, minW: Math.min(...bs.map(b => b.width)) }
+		})
+		if (r.n !== 10 || r.rows !== 1 || r.out || r.minW < 30) throw new Error(JSON.stringify(r))
 	})
 	await check('灰字（SGR 2）：真彩色的也是半透明', async () => {
 		await page.keyboard.type("printf 'n0 \\033[2mDIM1\\033[0m \\033[2;38;2;235;219;178mDIM2\\033[0m \\033[2;38;2;214;216;224;48;2;30;30;30m灰字\\033[0m\\n'")
@@ -288,11 +301,6 @@ try {
 		if (!html.includes('img-done')) throw new Error('缩略图里没有最后一屏')
 		await until(async () => (await page.locator('.host .dot').getAttribute('data-state')) === 'open', '首页圆点 open')
 	})
-	await check('首页的开关改键盘模式', async () => {
-		await page.selectOption('.kbmode select', 'pan')
-		const m = await page.evaluate(() => localStorage.getItem('moco.keyboardMode'))
-		if (m !== 'pan') throw new Error('存的是 ' + m)
-	})
 	await check('再打开还连着', async () => {
 		await page.click('.host')
 		await until(async () => (await status()) === '已连接', '已连接')
@@ -305,28 +313,7 @@ try {
 		console.log('    ', mocodLog.match(/光标行：[^\n]{0,160}/)[0])
 		await page.locator('.debug').click()
 	})
-	await check('键盘弹出·改大小：行数变少，收起恢复', async () => {
-		await setMode('resize')
-		const full = await rows()
-		await keyboardUp(348)
-		await until(async () => (await rows()) < full, '行数变少')
-		await keyboardUp(0)
-		await until(async () => (await rows()) === full, '行数恢复')
-	})
-	await check('键盘弹出·等新画面：盖一张截图，新尺寸的帧一到就揭掉', async () => {
-		await setMode('swap')
-		const full = await rows()
-		for (const px of [348, 0]) {
-			const covered = await page.evaluate(px => (window.__keyboard(px), !!document.querySelector('.pane .frozen')), px)
-			if (!covered) throw new Error(`键盘 ${px}：改尺寸时没盖截图`)
-			const t0 = Date.now()
-			await until(() => page.evaluate(() => !document.querySelector('.pane .frozen')), '揭掉截图', 2000)
-			if (Date.now() - t0 > 600) throw new Error(`键盘 ${px}：等了 ${Date.now() - t0}ms 才揭掉，是兜底超时不是新帧`)
-		}
-		if ((await rows()) !== full) throw new Error('收起后行数没恢复')
-	})
-	await check('键盘弹出·不改大小：行数不变，光标露在上面', async () => {
-		await setMode('pan')
+	await check('键盘弹出：行数不变，光标露在上面', async () => {
 		const full = await rows()
 		await page.focus('#input')
 		await page.keyboard.type('clear; seq 1 80')

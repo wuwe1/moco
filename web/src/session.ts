@@ -9,9 +9,7 @@ import { dlog } from './debug'
 import { gestures } from './gestures'
 import { grid, locate } from './grid'
 import { ImageLayer } from './images'
-import { fontSize, keyboardMode, saveScreen, setFontSize, type Host } from './store'
-
-const THAW_AFTER_MS = 800
+import { fontSize, saveScreen, setFontSize, type Host } from './store'
 
 const sessions = new Map<string, Session>()
 const listeners = new Set<() => void>()
@@ -52,8 +50,6 @@ export class Session {
 	private serializer = new SerializeAddon()
 	private opened = false
 	private panned = false
-	private frozen?: HTMLElement
-	private thawTimer = 0
 	onPlainTap = () => {}
 	onImage = (_img: { png: Uint8Array<ArrayBuffer>; w: number; h: number }) => {}
 
@@ -85,7 +81,6 @@ export class Session {
 			},
 			this.images,
 		)
-		this.conn.onFrameDrawn = () => this.thaw()
 		this.term.onRender(() => this.follow())
 		this.term.onData(d => this.conn.send(d))
 		this.term.onResize(({ cols, rows }) => {
@@ -146,20 +141,16 @@ export class Session {
 	}
 
 	layout(keyboardOpen: boolean) {
-		const mode = keyboardMode()
-		this.panned = keyboardOpen && mode === 'pan'
+		this.panned = keyboardOpen
 		if (this.panned) return this.follow()
 		this.el.style.height = ''
 		this.el.style.transform = ''
-		this.fitNow(mode === 'swap')
+		this.fitNow()
 	}
 
-	fitNow(hideUntilNewFrame = false) {
+	fitNow() {
 		if (!this.opened || this.el.hidden || this.panned) return
-		const before = `${this.term.cols}x${this.term.rows}`
-		if (hideUntilNewFrame) this.freeze()
 		this.fit.fit()
-		if (`${this.term.cols}x${this.term.rows}` === before) this.thaw()
 		this.images.draw()
 	}
 
@@ -172,27 +163,6 @@ export class Session {
 		const y = Math.min(Math.max(0, cursorBottom - visible), Math.max(0, full - visible))
 		this.el.style.height = `${full}px`
 		this.el.style.transform = `translateY(${-y}px)`
-	}
-
-	private freeze() {
-		const screen = grid(this.term)?.screen
-		if (this.frozen || !screen) return
-		const shot = screen.cloneNode(true) as HTMLElement
-		shot.className = 'frozen'
-		shot.style.left = `${screen.offsetLeft}px`
-		shot.style.top = `${screen.offsetTop}px`
-		screen.parentElement!.appendChild(shot)
-		this.frozen = shot
-		this.thawTimer = window.setTimeout(() => {
-			dlog(`截图盖了 ${THAW_AFTER_MS}ms 还没等到新尺寸的帧，直接揭掉`)
-			this.thaw()
-		}, THAW_AFTER_MS)
-	}
-
-	private thaw() {
-		clearTimeout(this.thawTimer)
-		this.frozen?.remove()
-		this.frozen = undefined
 	}
 
 	describeCursorRow() {

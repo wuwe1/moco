@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type { Conn, State } from './conn'
 import { debugLines, dlog, onDebug } from './debug'
-import { Keyboard, KeyboardOff } from 'lucide-preact'
+import { ArrowUp, Keyboard, KeyboardOff } from 'lucide-preact'
 import { KEYS, keyboard } from './keyboard'
 import { Lightbox, type Picture } from './lightbox'
 import { shrinkImage } from './shrink'
 import { connOf, getOrCreateSession, useRerenderOnSessionChange, type Session } from './session'
-import { KEYBOARD_MODES, keyboardMode, type Host } from './store'
+import type { Host } from './store'
 
 const KEYBOARD_MIN_PX = 80
 const CLOSE_DRAG_PX = 120
@@ -93,7 +93,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		const layout = () => {
 			const el = root.current!
 			const h = vv ? vv.height : window.innerHeight
-			if (h !== lastH) dlog(`可视高度 ${lastH} → ${h}，offsetTop ${vv?.offsetTop ?? 0}，innerHeight ${window.innerHeight}，${KEYBOARD_MODES[keyboardMode()]}`)
+			if (h !== lastH) dlog(`可视高度 ${lastH} → ${h}，offsetTop ${vv?.offsetTop ?? 0}，innerHeight ${window.innerHeight}`)
 			lastH = h
 			el.style.height = `${h}px`
 			el.style.setProperty('--vv-top', `${vv ? vv.offsetTop : 0}px`)
@@ -186,8 +186,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 			/>
 			<div id="compose" hidden />
 			<div id="bar">
-				<div id="keys">{KEYS.filter(k => !k.pinned).map(keyButton)}</div>
-				{KEYS.filter(k => k.pinned).map(keyButton)}
+				{KEYS.map(keyButton)}
 				<button id="kbd" aria-label={typing ? '收起键盘' : '弹出键盘'}>
 					{typing ? <KeyboardOff size={ICON_PX} /> : <Keyboard size={ICON_PX} />}
 				</button>
@@ -220,8 +219,10 @@ const TOAST_MS = 3000
 function keyButton(k: (typeof KEYS)[number]) {
 	const Icon = k.icon
 	return (
-		<button key={k.id} data-key={k.id} aria-label={k.label} aria-pressed={k.kind === 'ctrl' ? 'false' : undefined}>
-			{Icon ? <Icon size={ICON_PX} /> : k.label}
+		<button key={k.id} data-key={k.id} class={k.kind === 'dpad' ? 'dpad' : undefined} aria-label={k.label} aria-pressed={k.kind === 'ctrl' ? 'false' : undefined}>
+			{Icon && <Icon size={ICON_PX} class="face" />}
+			{k.kind === 'dpad' && <ArrowUp size={ICON_PX} class="aim" />}
+			{!Icon && k.label}
 		</button>
 	)
 }

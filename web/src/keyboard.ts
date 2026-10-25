@@ -1,5 +1,5 @@
 import type { Terminal } from '@xterm/xterm'
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowRightToLine, ArrowUp, ClipboardPaste, CornerDownLeft, ImagePlus, type LucideIcon } from 'lucide-preact'
+import { ArrowRightToLine, ClipboardPaste, CornerDownLeft, ImagePlus, Move, type LucideIcon } from 'lucide-preact'
 import { dlog } from './debug'
 
 // 框里常驻一个零宽字符：框是空的时候 iOS 不报删除，退格就发不出去
@@ -7,67 +7,102 @@ const SENTINEL = '​'
 
 const arrow = (c: string) => (t?: Terminal) => (t?.modes.applicationCursorKeysMode ? '\x1bO' : '\x1b[') + c
 
-type Face = { id: string; label: string; icon?: LucideIcon; pinned?: boolean }
-type SendKey = Face & { kind: 'send'; seq: (t?: Terminal) => string; repeat?: boolean }
-type Key = SendKey | (Face & { kind: 'ctrl' | 'paste' | 'image' })
+type Dir = 'up' | 'down' | 'left' | 'right'
+const ARROWS: Record<Dir, (t?: Terminal) => string> = { up: arrow('A'), down: arrow('B'), right: arrow('C'), left: arrow('D') }
+
+type Face = { id: string; label: string; icon?: LucideIcon }
+type SendKey = Face & { kind: 'send'; seq: (t?: Terminal) => string }
+type Key = SendKey | (Face & { kind: 'ctrl' | 'dpad' | 'paste' | 'image' })
 export const KEYS: Key[] = [
 	{ kind: 'send', id: 'esc', label: 'Esc', seq: () => '\x1b' },
 	{ kind: 'send', id: 'tab', label: 'Tab', icon: ArrowRightToLine, seq: () => '\t' },
 	{ kind: 'ctrl', id: 'ctrl', label: 'Ctrl' },
 	{ kind: 'send', id: '^c', label: '^C', seq: () => '\x03' },
 	{ kind: 'send', id: '^b', label: '^B', seq: () => '\x02' },
-	{ kind: 'send', id: 'left', label: '左', icon: ArrowLeft, seq: arrow('D'), repeat: true },
-	{ kind: 'send', id: 'up', label: '上', icon: ArrowUp, seq: arrow('A'), repeat: true },
-	{ kind: 'send', id: 'down', label: '下', icon: ArrowDown, seq: arrow('B'), repeat: true },
-	{ kind: 'send', id: 'right', label: '右', icon: ArrowRight, seq: arrow('C'), repeat: true },
+	{ kind: 'dpad', id: 'dpad', label: '方向', icon: Move },
 	{ kind: 'paste', id: 'paste', label: '粘贴', icon: ClipboardPaste },
 	{ kind: 'image', id: 'image', label: '图片', icon: ImagePlus },
-	{ kind: 'send', id: 'enter', label: '回车', icon: CornerDownLeft, seq: () => '\r', pinned: true },
+	{ kind: 'send', id: 'enter', label: '回车', icon: CornerDownLeft, seq: () => '\r' },
 ]
 const keyById = new Map(KEYS.map(k => [k.id, k]))
 
-const sendKey = (id: string) => keyById.get(id) as SendKey
-const HARDWARE_KEYS: Record<string, SendKey | undefined> = {
-	Escape: sendKey('esc'), Tab: sendKey('tab'), ArrowLeft: sendKey('left'), ArrowUp: sendKey('up'), ArrowDown: sendKey('down'), ArrowRight: sendKey('right'),
+const sendKey = (id: string) => (keyById.get(id) as SendKey).seq
+const HARDWARE_KEYS: Record<string, ((t?: Terminal) => string) | undefined> = {
+	Escape: sendKey('esc'), Tab: sendKey('tab'), ArrowLeft: ARROWS.left, ArrowUp: ARROWS.up, ArrowDown: ARROWS.down, ArrowRight: ARROWS.right,
 }
 
 const SLOP_PX = 12
-const REPEAT_AFTER_MS = 400
-const REPEAT_EVERY_MS = 60
+const DPAD_DEAD_PX = 10
+const DPAD_FAR_PX = 40
+const DPAD_REPEAT_AFTER_MS = 300
+const DPAD_NEAR_EVERY_MS = 120
+const DPAD_FAR_EVERY_MS = 40
+
+function dpad(btn: HTMLElement, fire: (d: Dir) => void) {
+	let origin: { x: number; y: number } | undefined
+	let dir: Dir | undefined
+	let dist = 0
+	let timer = 0
+	const tick = () => {
+		if (!dir) return
+		fire(dir)
+		timer = window.setTimeout(tick, dist >= DPAD_FAR_PX ? DPAD_FAR_EVERY_MS : DPAD_NEAR_EVERY_MS)
+	}
+	const aim = (next?: Dir) => {
+		if (next === dir) return
+		dir = next
+		clearTimeout(timer)
+		if (!next) return void delete btn.dataset.dir
+		btn.dataset.dir = next
+		fire(next)
+		timer = window.setTimeout(tick, DPAD_REPEAT_AFTER_MS)
+	}
+	const end = () => {
+		origin = undefined
+		aim(undefined)
+		btn.classList.remove('down')
+	}
+	btn.addEventListener('pointerdown', e => {
+		e.preventDefault()
+		btn.setPointerCapture(e.pointerId)
+		origin = { x: e.clientX, y: e.clientY }
+		btn.classList.add('down')
+	})
+	btn.addEventListener('pointermove', e => {
+		if (!origin) return
+		const dx = e.clientX - origin.x
+		const dy = e.clientY - origin.y
+		dist = Math.hypot(dx, dy)
+		if (dist < DPAD_DEAD_PX) aim(undefined)
+		else if (Math.abs(dx) > Math.abs(dy)) aim(dx > 0 ? 'right' : 'left')
+		else aim(dy > 0 ? 'down' : 'up')
+	})
+	btn.addEventListener('pointerup', end)
+	btn.addEventListener('pointercancel', end)
+}
 
 // click：iOS 只在 click 里放行读剪贴板；在 pointerup 里 focus() 输入框，随后 iOS 补发的那次轻点会把焦点又拿走，键盘弹一下就收回去
-function pressable(btn: HTMLElement, on: { release?: () => void; click?: () => void; repeat?: () => void }) {
+function pressable(btn: HTMLElement, on: { release?: () => void; click?: () => void }) {
 	let armed = false
 	let released = false
-	let repeating = false
-	let timer = 0
 	const over = (e: PointerEvent) => {
 		const r = btn.getBoundingClientRect()
 		return e.clientX >= r.left - SLOP_PX && e.clientX <= r.right + SLOP_PX && e.clientY >= r.top - SLOP_PX && e.clientY <= r.bottom + SLOP_PX
 	}
 	const cancel = () => {
-		armed = repeating = false
-		clearTimeout(timer)
-		clearInterval(timer)
+		armed = false
 		btn.classList.remove('down')
 	}
 	btn.addEventListener('pointerdown', e => {
 		e.preventDefault()
 		armed = true
 		btn.classList.add('down')
-		const { repeat } = on
-		if (repeat)
-			timer = window.setTimeout(() => {
-				repeating = true
-				repeat()
-				timer = window.setInterval(repeat, REPEAT_EVERY_MS)
-			}, REPEAT_AFTER_MS)
 	})
 	btn.addEventListener('pointermove', e => {
 		if (armed && !over(e)) cancel()
 	})
 	btn.addEventListener('pointerup', e => {
-		released = armed && !repeating && over(e)
+		released = armed && over(e)
 		cancel()
 		if (released) on.release?.()
 	})
@@ -158,7 +193,7 @@ export function keyboard(root: HTMLElement, { term, send, onPasteFailed, onPickI
 	})
 	input.addEventListener('keydown', e => {
 		if (e.isComposing) return
-		let out = HARDWARE_KEYS[e.key]?.seq(term())
+		let out = HARDWARE_KEYS[e.key]?.(term())
 		if (!out && e.ctrlKey && e.key.length === 1) out = toCtrl(e.key)
 		if (out) {
 			e.preventDefault()
@@ -180,10 +215,9 @@ export function keyboard(root: HTMLElement, { term, send, onPasteFailed, onPickI
 	}
 	for (const btn of root.querySelectorAll<HTMLButtonElement>('#bar [data-key]')) {
 		const key = keyById.get(btn.dataset.key!)!
-		if (key.kind === 'send') {
-			const fire = () => send(key.seq(term()))
-			pressable(btn, { release: fire, repeat: key.repeat ? fire : undefined })
-		} else if (key.kind === 'ctrl') pressable(btn, { release: () => setCtrl(!ctrl) })
+		if (key.kind === 'send') pressable(btn, { release: () => send(key.seq(term())) })
+		else if (key.kind === 'dpad') dpad(btn, d => send(ARROWS[d](term())))
+		else if (key.kind === 'ctrl') pressable(btn, { release: () => setCtrl(!ctrl) })
 		else if (key.kind === 'paste') pressable(btn, { click: readClipboard })
 		else pressable(btn, { click: onPickImage })
 	}

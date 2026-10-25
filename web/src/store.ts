@@ -11,7 +11,6 @@ export type Screen = { html: string; at: number }
 const HOSTS = 'moco.hosts'
 const FONT = 'moco.fontSize'
 const DEVICE = 'moco.deviceName'
-const KEYBOARD_MODE = 'moco.keyboardMode'
 const screenKey = (id: string) => `moco.screen.${id}`
 
 export function loadHosts(): Host[] {
@@ -50,15 +49,6 @@ export const setFontSize = (n: number) => localStorage.setItem(FONT, String(n))
 
 export const deviceName = () => localStorage.getItem(DEVICE) ?? 'iPhone'
 export const setDeviceName = (s: string) => localStorage.setItem(DEVICE, s)
-
-export const KEYBOARD_MODES = { resize: '改大小', swap: '改大小，等新画面', pan: '不改大小' }
-export type KeyboardMode = keyof typeof KEYBOARD_MODES
-const isKeyboardMode = (s: string | null): s is KeyboardMode => !!s && s in KEYBOARD_MODES
-export const keyboardMode = (): KeyboardMode => {
-	const m = localStorage.getItem(KEYBOARD_MODE)
-	return isKeyboardMode(m) ? m : 'resize'
-}
-export const setKeyboardMode = (m: KeyboardMode) => localStorage.setItem(KEYBOARD_MODE, m)
 
 export function normalizeUrl(input: string): string {
 	let s = input.trim().replace(/\/+$/, '')
