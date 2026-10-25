@@ -1,7 +1,3 @@
-// 前端的端到端冒烟：编一个 mocod、出一份 web/dist，起在临时目录（MOCOD_HOME）、端口 7699、命令 bash，
-// 用本机的 Chrome（无头、手机视口、触屏）走一遍：配对、打字、按键栏、粘贴、kitty 图、手势、收起抽屉、删掉重配。
-// 不碰电脑上正在用的 mocod 和它的设备名单。
-// 用法：cd tools/smoke && pnpm install && node smoke.mjs
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -60,7 +56,6 @@ const key = async k => {
 	await b.dispatchEvent('pointerdown')
 	await b.dispatchEvent('pointerup')
 }
-// canvas 上第一个红色像素，换成页面坐标
 const redPixel = () => page.evaluate(() => {
 	const c = document.querySelector('.pane:not([hidden]) canvas.images')
 	if (!c?.width) return
@@ -74,14 +69,12 @@ const redPixel = () => page.evaluate(() => {
 	}
 })
 const status = () => page.locator('#grab .status').textContent()
-// 在添加页填地址和新配对码，等到连上
 const pair = async () => {
 	await page.fill('#add input[inputmode="url"]', base)
 	await page.fill('#add input[inputmode="numeric"]', pairCode())
 	await page.click('#add button.primary')
 	await until(async () => (await status()) === '已连接', '已连接')
 }
-// 把手往下拖，收回首页
 const closeSheet = async () => {
 	const box = await page.locator('#grab').boundingBox()
 	await page.mouse.move(box.x + 50, box.y + 10)
@@ -160,7 +153,7 @@ try {
 		await until(() => redPixel().then(Boolean), 'canvas 上的红色')
 	})
 	await check('轻点图：出大图，关掉', async () => {
-		await page.locator('#kbd').dispatchEvent('pointerdown') // 先收起键盘
+		await page.locator('#kbd').dispatchEvent('pointerdown')
 		const at = await redPixel()
 		await page.touchscreen.tap(at.x, at.y)
 		await until(() => page.locator('.lightbox').count(), '大图')

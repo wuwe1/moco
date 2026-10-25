@@ -1,5 +1,3 @@
-// 一个连接 = 一个终端 + 一条到 mocod 的连接。离开终端页时不断开，回来立刻能用；
-// 离开时把当前这一屏存成 HTML，首页的缩略图就是它
 import { FitAddon } from '@xterm/addon-fit'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { UnicodeGraphemesAddon } from '@xterm/addon-unicode-graphemes'
@@ -17,8 +15,7 @@ const sessions = new Map<string, Session>()
 const listeners = new Set<() => void>()
 const changed = () => listeners.forEach(fn => fn())
 
-// 组件里用：哪个连接的状态变了就重画
-export function useSessions() {
+export function useRerenderOnSessionChange() {
 	const [, bump] = useState(0)
 	useEffect(() => {
 		const fn = () => bump(n => n + 1)
@@ -27,7 +24,7 @@ export function useSessions() {
 	}, [])
 }
 
-export function session(host: Host): Session {
+export function getOrCreateSession(host: Host): Session {
 	let s = sessions.get(host.id)
 	if (!s) {
 		s = new Session(host)
@@ -36,7 +33,6 @@ export function session(host: Host): Session {
 	return s
 }
 
-// 只查不建：没打开过的连接没有
 export const connOf = (id: string): Conn | undefined => sessions.get(id)?.conn
 
 export function dropSession(id: string) {
@@ -53,8 +49,7 @@ export class Session {
 	private fit = new FitAddon()
 	private serializer = new SerializeAddon()
 	private opened = false
-	// 轻点：点在图上就放大看原图，程序开了鼠标上报就当成点一下，都不是就弹键盘
-	onTap = () => {}
+	onPlainTap = () => {}
 	onImage = (_img: { png: Uint8Array<ArrayBuffer>; w: number; h: number }) => {}
 
 	constructor(readonly host: Host) {
@@ -89,25 +84,27 @@ export class Session {
 		this.term.onResize(({ cols, rows }) => this.conn.resize(cols, rows))
 	}
 
-	// 挂到终端页上：第一次挂上时才真正打开终端、开始连接（xterm 要量得到尺寸）
 	attach(parent: HTMLElement) {
 		dlog(`打开 ${this.host.name}，连接状态 ${this.conn.state}`)
 		if (this.el.parentElement !== parent) parent.appendChild(this.el)
 		this.el.hidden = false
-		if (!this.opened) {
-			this.opened = true
-			this.term.open(this.el)
-			this.images.mount()
-			gestures(this.el, this.term, { onTap: (x, y) => this.tap(x, y), onFont: setFont })
-		}
+		this.openOnFirstAttach()
 		this.fitNow()
 		if (this.conn.state === 'closed') this.conn.connect()
+	}
+
+	private openOnFirstAttach() {
+		if (this.opened) return
+		this.opened = true
+		this.term.open(this.el)
+		this.images.mount()
+		gestures(this.el, this.term, { onTap: (x, y) => this.tap(x, y), onFont: setFontForAllSessions })
 	}
 
 	private tap(x: number, y: number) {
 		const img = this.images.hit(x, y)
 		if (img) return this.onImage(img)
-		if (!this.click(x, y)) this.onTap()
+		if (!this.click(x, y)) this.onPlainTap()
 	}
 
 	// 程序开了鼠标上报（herdr、pi 都开）：在那一格按下、松开左键。
@@ -157,8 +154,7 @@ export class Session {
 	}
 }
 
-// 字号是全局的：捏合改一个，所有终端一起变
-function setFont(size: number) {
+function setFontForAllSessions(size: number) {
 	setFontSize(size)
 	sessions.forEach(s => {
 		s.term.options.fontSize = size

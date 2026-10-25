@@ -1,7 +1,6 @@
-// 放大看原图：终端里的图被 herdr 缩到几格大，还可能被窗格裁掉一块；这里用 mocod 发来的整张 PNG。
-// 打开时整张放进屏幕（比屏幕小就按原大小），双指缩放、单指拖，双击在「适合屏幕」和放大之间切换，
-// 轻点或在原大小时往下拖就关掉
 import { useEffect, useMemo, useRef } from 'preact/hooks'
+
+const DOUBLE_TAP_MS = 280
 
 export type Picture = { png: Uint8Array<ArrayBuffer>; w: number; h: number }
 
@@ -15,7 +14,6 @@ export function Lightbox(props: { img: Picture; onClose: () => void }) {
 	close.current = props.onClose
 	useEffect(() => zoomable(stage.current!, pic.current!, img.w, img.h, () => close.current()), [img])
 
-	// iOS 的分享面板里有「存储图像」
 	const file = useMemo(() => new File([img.png], 'image.png', { type: 'image/png' }), [img])
 	const canShare = !!navigator.canShare?.({ files: [file] })
 
@@ -44,7 +42,6 @@ function zoomable(stage: HTMLElement, img: HTMLImageElement, w: number, h: numbe
 		stage.classList.toggle('settle', settle)
 		img.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`
 	}
-	// 比屏幕窄（矮）就居中，比屏幕大就不许拖出空白
 	const clamp = () => {
 		const vw = stage.clientWidth
 		const vh = stage.clientHeight
@@ -58,7 +55,6 @@ function zoomable(stage: HTMLElement, img: HTMLImageElement, w: number, h: numbe
 		clamp()
 		apply()
 	}
-	// 以屏幕上 (x, y) 那一点为中心缩放到 next
 	const zoomAt = (x: number, y: number, next: number) => {
 		tx = x - ((x - tx) / s) * next
 		ty = y - ((y - ty) / s) * next
@@ -127,7 +123,6 @@ function zoomable(stage: HTMLElement, img: HTMLImageElement, w: number, h: numbe
 	}
 	const up = (e: TouchEvent) => {
 		e.preventDefault()
-		// 捏合时先抬起一根手指：剩下那根接着拖
 		if (e.touches.length === 1) return beginPan(pt(e.touches[0]))
 		if (e.touches.length) return
 		const was = mode
@@ -141,10 +136,9 @@ function zoomable(stage: HTMLElement, img: HTMLImageElement, w: number, h: numbe
 		apply(true)
 	}
 
-	// 单击要等一下，看是不是双击
 	const tap = (p: P) => {
 		const now = performance.now()
-		if (now - lastTap < 280) {
+		if (now - lastTap < DOUBLE_TAP_MS) {
 			clearTimeout(tapTimer)
 			lastTap = 0
 			if (s > fit * 1.01) zoomAt(p.x, p.y, fit)
@@ -154,7 +148,7 @@ function zoomable(stage: HTMLElement, img: HTMLImageElement, w: number, h: numbe
 			return
 		}
 		lastTap = now
-		tapTimer = window.setTimeout(onClose, 280)
+		tapTimer = window.setTimeout(onClose, DOUBLE_TAP_MS)
 	}
 
 	const opt = { passive: false }

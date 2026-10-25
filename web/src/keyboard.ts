@@ -1,5 +1,3 @@
-// 键盘：看不见的 textarea 收系统键盘和输入法，按键栏补上手机键盘没有的键
-// 打一个字就发一个字；拼音这类输入法拼完（compositionend）才发
 import type { Terminal } from '@xterm/xterm'
 import { dlog } from './debug'
 
@@ -8,29 +6,34 @@ const SENTINEL = '​'
 
 const arrow = (c: string) => (t?: Terminal) => (t?.modes.applicationCursorKeysMode ? '\x1bO' : '\x1b[') + c
 
-// 按键栏：手机键盘上没有的键，按钮就照这张表排。seq 是按下时发的字节，repeat 的按住连发；
-// Ctrl（锁住下一个字）和粘贴（读剪贴板）没有固定的字节，单独处理
-type Key = { id: string; label: string; seq?: (t?: Terminal) => string; repeat?: boolean }
+type SendKey = { kind: 'send'; id: string; label: string; seq: (t?: Terminal) => string; repeat?: boolean }
+type Key = SendKey | { kind: 'ctrl' | 'paste'; id: string; label: string }
 export const KEYS: Key[] = [
-	{ id: 'esc', label: 'Esc', seq: () => '\x1b' },
-	{ id: 'tab', label: 'Tab', seq: () => '\t' },
-	{ id: 'ctrl', label: 'Ctrl' },
-	{ id: '^c', label: '^C', seq: () => '\x03' },
-	{ id: '^b', label: '^B', seq: () => '\x02' },
-	{ id: 'left', label: '←', seq: arrow('D'), repeat: true },
-	{ id: 'up', label: '↑', seq: arrow('A'), repeat: true },
-	{ id: 'down', label: '↓', seq: arrow('B'), repeat: true },
-	{ id: 'right', label: '→', seq: arrow('C'), repeat: true },
-	{ id: 'enter', label: '⏎', seq: () => '\r' },
-	{ id: 'paste', label: '粘贴' },
+	{ kind: 'send', id: 'esc', label: 'Esc', seq: () => '\x1b' },
+	{ kind: 'send', id: 'tab', label: 'Tab', seq: () => '\t' },
+	{ kind: 'ctrl', id: 'ctrl', label: 'Ctrl' },
+	{ kind: 'send', id: '^c', label: '^C', seq: () => '\x03' },
+	{ kind: 'send', id: '^b', label: '^B', seq: () => '\x02' },
+	{ kind: 'send', id: 'left', label: '←', seq: arrow('D'), repeat: true },
+	{ kind: 'send', id: 'up', label: '↑', seq: arrow('A'), repeat: true },
+	{ kind: 'send', id: 'down', label: '↓', seq: arrow('B'), repeat: true },
+	{ kind: 'send', id: 'right', label: '→', seq: arrow('C'), repeat: true },
+	{ kind: 'send', id: 'enter', label: '⏎', seq: () => '\r' },
+	{ kind: 'paste', id: 'paste', label: '粘贴' },
 ]
 const keyById = new Map(KEYS.map(k => [k.id, k]))
 
-// 外接键盘（iPad、Mac 上调试）上和按键栏一样的键
-const EXTERNAL: Record<string, string> = { Escape: 'esc', Tab: 'tab', ArrowLeft: 'left', ArrowUp: 'up', ArrowDown: 'down', ArrowRight: 'right' }
+const sendKey = (id: string) => keyById.get(id) as SendKey
+const HARDWARE_KEYS: Record<string, SendKey | undefined> = {
+	Escape: sendKey('esc'), Tab: sendKey('tab'), ArrowLeft: sendKey('left'), ArrowUp: sendKey('up'), ArrowDown: sendKey('down'), ArrowRight: sendKey('right'),
+}
 
-// root 是终端抽屉：按键栏、输入框都在里面；term 取当前打开的那个连接的终端
-// onPasteFailed：读不到剪贴板（没给权限、点掉了系统的「粘贴」气泡）时，让人在一个看得见的框里自己粘贴
+const pressKeepingFocus = (el: HTMLElement, fn: () => void) =>
+	el.addEventListener('pointerdown', e => {
+		e.preventDefault()
+		fn()
+	})
+
 export function keyboard(root: HTMLElement, term: () => Terminal | undefined, send: (s: string) => void, onPasteFailed: () => void) {
 	const input = root.querySelector('#input') as HTMLTextAreaElement
 	const compose = root.querySelector('#compose') as HTMLDivElement
@@ -62,7 +65,6 @@ export function keyboard(root: HTMLElement, term: () => Terminal | undefined, se
 	const paste = (s: string) => {
 		s = s.replace(/\r?\n/g, '\r')
 		const bracketed = term()?.modes.bracketedPasteMode
-		// 程序没开粘贴模式时，多行会被当成一行行回车执行：先问一句
 		const lines = s.split('\r').length
 		if (!bracketed && lines > 1 && !confirm(`粘贴 ${lines} 行？终端里的程序没开粘贴模式，每一行都会像按了回车一样执行。`)) return
 		send(bracketed ? `\x1b[200~${s}\x1b[201~` : s)
@@ -102,7 +104,7 @@ export function keyboard(root: HTMLElement, term: () => Terminal | undefined, se
 	})
 	input.addEventListener('keydown', e => {
 		if (e.isComposing) return
-		let out = keyById.get(EXTERNAL[e.key])?.seq?.(term())
+		let out = HARDWARE_KEYS[e.key]?.seq(term())
 		if (!out && e.ctrlKey && e.key.length === 1) out = toCtrl(e.key)
 		if (out) {
 			e.preventDefault()
@@ -111,21 +113,19 @@ export function keyboard(root: HTMLElement, term: () => Terminal | undefined, se
 	})
 	input.addEventListener('focus', reset)
 
-	// 按键栏：pointerdown 就触发并拦掉默认行为，焦点留在输入框里，键盘不会收起
 	for (const btn of root.querySelectorAll<HTMLButtonElement>('#keys button')) {
 		const key = keyById.get(btn.dataset.key!)!
-		const fire = () => send(key.seq!(term()))
 		let hold = 0
 		const stop = () => {
 			clearTimeout(hold)
 			clearInterval(hold)
 			btn.classList.remove('down')
 		}
-		btn.addEventListener('pointerdown', e => {
-			e.preventDefault()
+		pressKeepingFocus(btn, () => {
 			btn.classList.add('down')
-			if (key.id === 'ctrl') return setCtrl(!ctrl)
-			if (!key.seq) return
+			if (key.kind === 'ctrl') return setCtrl(!ctrl)
+			if (key.kind !== 'send') return
+			const fire = () => send(key.seq(term()))
 			fire()
 			if (key.repeat) hold = window.setTimeout(() => (hold = window.setInterval(fire, 60)), 400)
 		})
@@ -147,9 +147,7 @@ export function keyboard(root: HTMLElement, term: () => Terminal | undefined, se
 		}
 	})
 
-	const kbd = root.querySelector('#kbd') as HTMLButtonElement
-	kbd.addEventListener('pointerdown', e => {
-		e.preventDefault()
+	pressKeepingFocus(root.querySelector<HTMLButtonElement>('#kbd')!, () => {
 		if (document.activeElement === input) input.blur()
 		else input.focus()
 	})

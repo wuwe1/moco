@@ -1,6 +1,3 @@
-// 和 mocod 的 WebSocket（子协议 moco.v1，见 internal/server/server.go 开头）：
-// hello（公钥）→ challenge（随机数、机器名）→ auth（签名）→ ready，之后二进制帧第一个字节是类型。
-// 断了自己重连；mocod 用 4401 关连接说明这台手机没登记或签名不对，这时不再重连，等重新配对
 import type { Terminal } from '@xterm/xterm'
 import { dlog, logTo } from './debug'
 import type { ImageLayer, Placement } from './images'
@@ -11,12 +8,11 @@ import { wireTheme } from './theme'
 export type State = 'connecting' | 'open' | 'closed' | 'unauthorized'
 
 const DELAYS = [300, 1000, 2000, 4000]
-// 握手 10 秒还没完成就当这条卡死了，关掉重来
 const HANDSHAKE_TIMEOUT = 10_000
 const UNAUTHORIZED = 4401
 const enc = new TextEncoder()
-// 二进制帧第一个字节的类型。0 手机发是键盘输入，mocod 发（v1）是终端原始输出
-const DATA = 0
+const INPUT = 0
+const RAW_OUTPUT = 0
 const RESIZE = 1
 const FRAME = 2
 const ACK = 3
@@ -24,6 +20,13 @@ const IMAGE = 4
 const PLACEMENTS = 5
 const FORGET = 6
 const LOG = 7
+
+type ServerMsg = { type: 'challenge'; nonce: string; name: string } | { type: 'ready'; name: string } | { type: 'exit'; code: number }
+
+const parseFrame = (buf: Uint8Array) => {
+	const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+	return { seq: view.getUint32(1), cols: view.getUint16(5), rows: view.getUint16(7), body: buf.subarray(9) }
+}
 
 const frame = (type: number, body: string) => {
 	const b = enc.encode(body)
@@ -39,18 +42,15 @@ export class Conn {
 	private timer?: number
 	private hiddenAt = 0
 	private stopped = false
-	// close() 时摘掉回前台、网络恢复的监听
-	private life = new AbortController()
+	private wakeListeners = new AbortController()
 	// 自己按流解 UTF-8 再交给 xterm.js：一个字的字节可能被切在两帧里，
 	// xterm.js 6.0.0 遇到 3 字节的字切在第 2 字节后会把这个字丢掉（tools/vtcheck 里查到的）
 	private decoder = new TextDecoder()
 	private frameDecoder = new TextDecoder()
 	state: State = 'closed'
-	// 上一次断开的关闭码和原因，显示在抽屉的标题栏上，排查用
 	lastClose = ''
 	retries = 0
-	// 下一帧画完时生效的放置（图片和那一帧的文字同时出现）
-	private pendingPlacements?: Placement[]
+	private placementsOnNextFrame?: Placement[]
 	private unlog = () => {}
 
 	constructor(
@@ -59,7 +59,7 @@ export class Conn {
 		private onState: (s: State) => void,
 		private images: ImageLayer,
 	) {
-		const { signal } = this.life
+		const { signal } = this.wakeListeners
 		document.addEventListener('visibilitychange', () => {
 			if (document.hidden) this.hiddenAt = Date.now()
 			else this.wake(Date.now() - this.hiddenAt > 10_000)
@@ -82,7 +82,6 @@ export class Conn {
 		this.set('connecting')
 		const url = this.host.url.replace(/^http/, 'ws') + '/ws'
 		dlog(`新建 WebSocket ${url}`)
-		// v2：mocod 在电脑上维护画面，只发变化，手机慢了也不会堵住程序；老的 mocod 只会 v1
 		const ws = new WebSocket(url, ['moco.v2', 'moco.v1'])
 		ws.binaryType = 'arraybuffer'
 		const guard = window.setTimeout(() => {
@@ -106,7 +105,7 @@ export class Conn {
 				const buf = new Uint8Array(e.data as ArrayBuffer)
 				const view = new DataView(buf.buffer)
 				switch (buf[0]) {
-					case DATA:
+					case RAW_OUTPUT:
 						this.term.write(this.decoder.decode(buf.subarray(1), { stream: true }))
 						break
 					case FRAME:
@@ -116,7 +115,7 @@ export class Conn {
 						this.images.add(view.getUint32(1), buf.slice(9))
 						break
 					case PLACEMENTS:
-						this.pendingPlacements = JSON.parse(this.frameDecoder.decode(buf.subarray(1)))
+						this.placementsOnNextFrame = JSON.parse(this.frameDecoder.decode(buf.subarray(1)))
 						break
 					case FORGET:
 						for (let i = 1; i + 4 <= buf.length; i += 4) this.images.forget(view.getUint32(i))
@@ -124,10 +123,9 @@ export class Conn {
 				}
 				return
 			}
-			const msg = JSON.parse(e.data)
-			dlog(`收到 ${msg.type}${msg.code !== undefined ? ' code=' + msg.code : ''}`)
+			const msg: ServerMsg = JSON.parse(e.data)
+			dlog(`收到 ${msg.type}${'code' in msg ? ' code=' + msg.code : ''}`)
 			if (msg.type === 'challenge') {
-				// 只给配对时那台机器签：签名里带机器名，名字对不上说明连错了地方
 				if (msg.name !== this.host.name) return ws.close(4000, 'host mismatch')
 				ws.send(JSON.stringify({ type: 'auth', sig: await signChallenge(msg.name, msg.nonce) }))
 			} else if (msg.type === 'ready') {
@@ -136,10 +134,9 @@ export class Conn {
 				this.term.reset()
 				this.decoder = new TextDecoder()
 				this.images.reset()
-				this.pendingPlacements = undefined
+				this.placementsOnNextFrame = undefined
 				this.set('open')
 				this.unlog = logTo(line => ws.readyState === WebSocket.OPEN && ws.send(frame(LOG, line)))
-				// 握手期间屏幕可能已经变过大小
 				this.resize(this.term.cols, this.term.rows)
 			}
 		}
@@ -161,28 +158,23 @@ export class Conn {
 		this.ws = ws
 	}
 
-	// v2 的一帧：[2][序号 u32][列 u16][行 u16][控制序列]。画完回确认，mocod 才发下一帧。
-	// 尺寸和手机现在的对不上，是改尺寸之前出的帧：不画，也照样确认（改完尺寸 mocod 会整屏重发）
 	private frame(ws: WebSocket, buf: Uint8Array) {
-		const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
-		const seq = view.getUint32(1)
-		const cols = view.getUint16(5)
-		const rows = view.getUint16(7)
+		const { seq, cols, rows, body } = parseFrame(buf)
 		const ack = () => {
-			if (this.pendingPlacements) {
-				this.images.set(this.pendingPlacements)
-				this.pendingPlacements = undefined
+			if (this.placementsOnNextFrame) {
+				this.images.set(this.placementsOnNextFrame)
+				this.placementsOnNextFrame = undefined
 			}
 			const out = new Uint8Array(5)
 			out[0] = ACK
 			new DataView(out.buffer).setUint32(1, seq)
 			if (this.ws === ws && ws.readyState === WebSocket.OPEN) ws.send(out)
 		}
-		if (cols !== this.term.cols || rows !== this.term.rows) return ack()
-		this.term.write(this.frameDecoder.decode(buf.subarray(9)), ack)
+		const drawnForOldSize = cols !== this.term.cols || rows !== this.term.rows
+		if (drawnForOldSize) return ack()
+		this.term.write(this.frameDecoder.decode(body), ack)
 	}
 
-	// 回到前台、网络恢复：立刻重连，不等退避。后台待久了的连接可能已经半死，直接换一条
 	private wake(stale: boolean) {
 		dlog(`wake stale=${stale} state=${this.state} readyState=${this.ws?.readyState}`)
 		if (this.stopped || this.state === 'unauthorized') return
@@ -196,7 +188,7 @@ export class Conn {
 	}
 
 	close() {
-		this.life.abort()
+		this.wakeListeners.abort()
 		this.stopped = true
 		clearTimeout(this.timer)
 		const ws = this.ws
@@ -206,11 +198,10 @@ export class Conn {
 	}
 
 	send(data: string) {
-		if (this.state === 'open') this.ws?.send(frame(DATA, data))
+		if (this.state === 'open') this.ws?.send(frame(INPUT, data))
 	}
 
 	resize(cols: number, rows: number) {
-		// 带上一格的大小：改字号时它也变了，mocod 用它回答程序的 CSI 16 t
 		if (this.state === 'open') this.ws?.send(frame(RESIZE, JSON.stringify({ cols, rows, cell: this.images.cellSize() })))
 	}
 }

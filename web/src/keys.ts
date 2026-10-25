@@ -1,8 +1,9 @@
-// 这台手机的设备密钥：Ed25519，私钥标成不可导出，存在本站自己的 IndexedDB 里。
-// 别的网站读不到；连本站的代码也只能拿它签名，取不出私钥本身
 const DB = 'moco'
 const STORE = 'keys'
 const ID = 'device'
+
+const EXTRACTABLE = false
+const authMessage = (name: string, nonce: string) => new TextEncoder().encode(`moco-auth-v1\n${name}\n${nonce}`)
 
 type DeviceKey = { pair: CryptoKeyPair; pub: string }
 let cached: Promise<DeviceKey> | undefined
@@ -31,7 +32,7 @@ export function deviceKey(): Promise<DeviceKey> {
 	cached ??= (async () => {
 		let pair = await tx<CryptoKeyPair | undefined>('readonly', s => s.get(ID))
 		if (!pair) {
-			pair = (await crypto.subtle.generateKey({ name: 'Ed25519' }, false, ['sign', 'verify'])) as CryptoKeyPair
+			pair = (await crypto.subtle.generateKey({ name: 'Ed25519' }, EXTRACTABLE, ['sign', 'verify'])) as CryptoKeyPair
 			await tx('readwrite', s => s.put(pair, ID))
 		}
 		const pub = b64url(await crypto.subtle.exportKey('raw', pair.publicKey))
@@ -41,14 +42,11 @@ export function deviceKey(): Promise<DeviceKey> {
 	return cached
 }
 
-// 和 mocod 的 auth.Message 一字不差
 export async function signChallenge(name: string, nonce: string): Promise<string> {
 	const { pair } = await deviceKey()
-	const msg = new TextEncoder().encode(`moco-auth-v1\n${name}\n${nonce}`)
-	return b64url(await crypto.subtle.sign({ name: 'Ed25519' }, pair.privateKey, msg))
+	return b64url(await crypto.subtle.sign({ name: 'Ed25519' }, pair.privateKey, authMessage(name, nonce)))
 }
 
-// 给人看的指纹：公钥前 8 个字符，分两组
 export async function fingerprint(): Promise<string> {
 	const { pub } = await deviceKey()
 	return `${pub.slice(0, 4)} ${pub.slice(4, 8)}`

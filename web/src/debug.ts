@@ -1,8 +1,5 @@
-// 连接日志：最近 200 条，点抽屉标题栏上的状态文字就能看，手机上排查连不上用。
-// 连上了也发给 mocod 记进它的日志，在电脑上就能看到手机这边出了什么事
 const lines: string[] = []
 const listeners = new Set<() => void>()
-// 还没发给 mocod 的
 let unsent: string[] = []
 let sink: ((line: string) => void) | undefined
 
@@ -16,7 +13,6 @@ export function dlog(msg: string) {
 	listeners.forEach(fn => fn())
 }
 
-// 连上 mocod 时接上，先补发断开期间的；返回的函数断开时调用
 export function logTo(fn: (line: string) => void) {
 	sink = fn
 	unsent.forEach(fn)

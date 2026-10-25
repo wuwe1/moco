@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'preact/hooks'
 import { deviceKey, fingerprint } from './keys'
-import { connOf, dropSession, useSessions } from './session'
+import { connOf, dropSession, useRerenderOnSessionChange } from './session'
 import { Sheet } from './sheet'
 import { deviceName, dropScreen, loadHosts, loadScreen, normalizeUrl, saveHosts, setDeviceName, type Host } from './store'
 
 type Health = 'checking' | 'online' | 'offline'
 
-// 缩略图里的那一屏：去掉页面默认的白底和边距
 const THUMB_STYLE = '<style>html,body{margin:0;background:#282828;overflow:hidden}pre{margin:0;padding:4px}</style>'
 
 export function App() {
@@ -28,8 +27,7 @@ export function App() {
 		dropScreen(h.id)
 		update(hosts.filter(x => x.id !== h.id))
 	}
-	// 同一个地址重新配对：换掉旧的那条，它的连接也关掉
-	const added = (h: Host) => {
+	const addReplacingSameUrl = (h: Host) => {
 		const replaced = hosts.filter(x => x.url === h.url)
 		replaced.forEach(x => (dropSession(x.id), dropScreen(x.id)))
 		update([...hosts.filter(x => x.url !== h.url), h])
@@ -40,7 +38,7 @@ export function App() {
 	return (
 		<>
 			<Home hosts={hosts} onOpen={open} onAdd={() => setAdding({})} onRemove={remove} hidden={!!adding} />
-			{adding && <Add initialUrl={adding.url} canCancel={hosts.length > 0} onCancel={() => setAdding(undefined)} onAdded={added} />}
+			{adding && <Add initialUrl={adding.url} canCancel={hosts.length > 0} onCancel={() => setAdding(undefined)} onAdded={addReplacingSameUrl} />}
 			<Sheet
 				host={active}
 				onClose={() => setActive(undefined)}
@@ -79,7 +77,7 @@ function useHealth(hosts: Host[]) {
 function Home(props: { hosts: Host[]; hidden: boolean; onOpen: (h: Host) => void; onAdd: () => void; onRemove: (h: Host) => void }) {
 	const health = useHealth(props.hosts)
 	const [fp, setFp] = useState('')
-	useSessions()
+	useRerenderOnSessionChange()
 	useEffect(() => {
 		fingerprint().then(setFp, () => setFp(''))
 	}, [])

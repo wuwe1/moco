@@ -70,7 +70,6 @@ button.icon { font-size: 22px; font-weight: 300; }
 .dot[data-state="open"], .dot[data-state="online"] { background: var(--ok); }
 .dot[data-state="closed"], .dot[data-state="unauthorized"] { background: var(--down); }
 
-/* ---- 首页、添加页：普通的可滚动页面 ---- */
 #home, #add {
 	position: absolute;
 	inset: 0;
@@ -111,7 +110,6 @@ button.icon { font-size: 22px; font-weight: 300; }
 }
 .host:active { border-color: var(--key-on); }
 
-/* 缩略图：上次离开时那一屏，按 1/2 缩小，只露出左上角 */
 .thumb {
 	position: relative;
 	aspect-ratio: 16 / 9;
@@ -196,8 +194,6 @@ input:focus { border-color: var(--key-on); }
 input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 .error { margin: 0; color: var(--down); font-size: 14px; }
 
-/* ---- 终端抽屉 ---- */
-/* 高度、位置由 visualViewport 算：键盘弹出时整体缩到键盘上方 */
 #sheet {
 	position: fixed;
 	left: 0;
@@ -222,7 +218,6 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 }
 #sheet.dragging { transition: none; }
 
-/* 把手：整条都能拖 */
 #grab {
 	position: relative;
 	display: flex;
@@ -246,7 +241,6 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 #grab .title { font-weight: 600; }
 #grab .status { margin-left: auto; color: var(--muted); font-size: 12px; text-decoration: underline dotted; text-underline-offset: 3px; }
 
-/* 连接日志：盖在终端上，点一下关掉 */
 .debug {
 	position: absolute;
 	top: calc(env(safe-area-inset-top) + 30px);
@@ -280,7 +274,6 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 }
 .pane.offline { opacity: .5; }
 .pane .xterm { height: 100%; }
-/* 图片层（images.ts）：盖在文字上面，不挡触摸 */
 .pane .images { position: absolute; z-index: 9; pointer-events: none; }
 /* 行数取整后底下剩几个像素：xterm 自带的视口是黑底，换成终端底色 */
 .pane .xterm-viewport { overflow-y: hidden !important; background: var(--term) !important; }
@@ -301,7 +294,6 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 }
 .notice p { margin: 0; }
 
-/* 输入法正在拼的字 */
 #compose {
 	position: absolute;
 	left: 8px;
@@ -353,7 +345,6 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 	caret-color: transparent;
 }
 
-/* 粘贴的退路：读不到剪贴板时出来，在按键栏上方 */
 .pastebox {
 	position: absolute;
 	left: 8px;
@@ -389,7 +380,6 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 .pastebox .count { flex: 1; color: var(--muted); font: 12px var(--mono); }
 .pastebox .send { background: var(--fg); color: var(--bg); font-weight: 600; }
 
-/* 放大看原图 */
 .lightbox {
 	position: absolute;
 	inset: 0;

@@ -1,4 +1,3 @@
-// 终端上的手势：单指拖动 = 滚轮（交给 herdr / pi 自己滚，松手带惯性），双指捏合 = 改字号，轻点交给 onTap（点在哪由它定）
 import type { Terminal } from '@xterm/xterm'
 import { grid } from './grid'
 
@@ -11,7 +10,7 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 	let lastY = 0
 	let lastT = 0
 	let acc = 0
-	let velocity = 0 // px/ms，手指往上推为正
+	let upwardPxPerMs = 0
 	let moved = 0
 	let startT = 0
 	let x = 0
@@ -20,8 +19,6 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 	let pinchFont = 0
 	let raf = 0
 
-	// 一行一个滚轮事件，位置是手指下面：herdr 按位置决定滚哪个窗格。
-	// 每帧最多发 WHEEL_PER_FRAME 个，多的留到下一帧：每个滚轮 herdr 都要重画，发太快手机收不过来
 	let queued = 0
 	let flushing = 0
 	const flush = () => {
@@ -44,7 +41,6 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 		if (queued) flushing = requestAnimationFrame(flush)
 	}
 	const wheel = (lines: number) => {
-		// 换方向时丢掉还没发的
 		if (Math.sign(lines) !== Math.sign(queued)) queued = 0
 		queued += lines
 		flushing ||= requestAnimationFrame(flush)
@@ -65,9 +61,9 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 		const step = (now: number) => {
 			const dt = now - prev
 			prev = now
-			velocity *= Math.pow(0.94, dt / 16)
-			if (Math.abs(velocity) < 0.05) return
-			scrollBy(velocity * dt)
+			upwardPxPerMs *= Math.pow(0.94, dt / 16)
+			if (Math.abs(upwardPxPerMs) < 0.05) return
+			scrollBy(upwardPxPerMs * dt)
 			raf = requestAnimationFrame(step)
 		}
 		raf = requestAnimationFrame(step)
@@ -75,12 +71,14 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 
 	const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
 
-	// 捕获阶段先拿到，并且不再往里传：xterm 自己的触摸滚动、聚焦都不要
-	const opt = { passive: false, capture: true }
+	const swallowTouch = (type: 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel', fn: (e: TouchEvent) => void) =>
+		el.addEventListener(type, e => {
+			e.preventDefault()
+			e.stopPropagation()
+			fn(e)
+		}, { passive: false, capture: true })
 
-	el.addEventListener('touchstart', e => {
-		e.preventDefault()
-		e.stopPropagation()
+	swallowTouch('touchstart', e => {
 		cancelAnimationFrame(raf)
 		queued = 0
 		if (e.touches.length >= 2) {
@@ -94,12 +92,10 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 		x = t.clientX
 		y = lastY = t.clientY
 		startT = lastT = e.timeStamp
-		acc = velocity = moved = 0
-	}, opt)
+		acc = upwardPxPerMs = moved = 0
+	})
 
-	el.addEventListener('touchmove', e => {
-		e.preventDefault()
-		e.stopPropagation()
+	swallowTouch('touchmove', e => {
 		if (mode === 'pinch' && e.touches.length >= 2) {
 			const size = Math.round(Math.min(FONT_MAX, Math.max(FONT_MIN, pinchFont * dist(e.touches) / pinchDist)))
 			if (size !== term.options.fontSize) opts.onFont(size)
@@ -109,23 +105,21 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 		const t = e.touches[0]
 		const dy = lastY - t.clientY
 		const dt = Math.max(1, e.timeStamp - lastT)
-		velocity = 0.8 * (dy / dt) + 0.2 * velocity
+		upwardPxPerMs = 0.8 * (dy / dt) + 0.2 * upwardPxPerMs
 		moved += Math.abs(dy)
 		lastY = t.clientY
 		lastT = e.timeStamp
 		scrollBy(dy)
-	}, opt)
+	})
 
-	el.addEventListener('touchend', e => {
-		e.preventDefault()
-		e.stopPropagation()
+	swallowTouch('touchend', e => {
 		if (e.touches.length) return
 		if (mode === 'scroll') {
 			if (moved < 8 && e.timeStamp - startT < 300) opts.onTap(x, y)
-			else if (e.timeStamp - lastT < 80 && Math.abs(velocity) > 0.3) glide()
+			else if (e.timeStamp - lastT < 80 && Math.abs(upwardPxPerMs) > 0.3) glide()
 		}
 		mode = 'none'
-	}, opt)
+	})
 
-	el.addEventListener('touchcancel', () => { mode = 'none' }, opt)
+	swallowTouch('touchcancel', () => { mode = 'none' })
 }

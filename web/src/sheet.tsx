@@ -1,12 +1,16 @@
-// 终端抽屉：从底部拉起盖住首页，顶上的把手往下拖就收回首页（连接不断）。
-// 按键栏、输入框只有一套，跟着当前打开的连接走
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type { Conn, State } from './conn'
 import { debugLines, onDebug } from './debug'
 import { KEYS, keyboard } from './keyboard'
 import { Lightbox, type Picture } from './lightbox'
-import { connOf, session, useSessions, type Session } from './session'
+import { connOf, getOrCreateSession, useRerenderOnSessionChange, type Session } from './session'
 import type { Host } from './store'
+
+const KEYBOARD_MIN_PX = 80
+const CLOSE_DRAG_PX = 120
+const FLING_MIN_PX = 30
+const FLING_PX_PER_MS = 0.6
+const TAP_SLOP_PX = 6
 
 const STATUS: Record<State, string> = {
 	open: '已连接',
@@ -15,7 +19,6 @@ const STATUS: Record<State, string> = {
 	unauthorized: '这台手机没登记',
 }
 
-// 断开时带上关闭码和已经重连了几次：1006 是网络层断的，4401 是没登记，4500 是电脑上的命令起不来
 function status(state: State, c?: Conn) {
 	if (state === 'closed' && c?.lastClose) return `已断开 ${c.lastClose}，第 ${c.retries} 次重连`
 	if (state === 'connecting' && c?.retries) return `连接中（上次 ${c.lastClose}，第 ${c.retries} 次）`
@@ -25,7 +28,7 @@ function status(state: State, c?: Conn) {
 export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: Host) => void }) {
 	const { host } = props
 	const root = useRef<HTMLDivElement>(null)
-	const panes = useRef<HTMLDivElement>(null)
+	const sessionMount = useRef<HTMLDivElement>(null)
 	const current = useRef<Session | undefined>(undefined)
 	const kb = useRef<ReturnType<typeof keyboard> | undefined>(undefined)
 	const [drag, setDrag] = useState(0)
@@ -34,14 +37,12 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	const [pasting, setPasting] = useState(false)
 	const [, bump] = useState(0)
 	useEffect(() => (debug ? onDebug(() => bump(n => n + 1)) : undefined), [debug])
-	useSessions()
+	useRerenderOnSessionChange()
 
-	// 按键栏、输入框只绑一次
 	useEffect(() => {
 		kb.current = keyboard(root.current!, () => current.current?.term, s => current.current?.conn.send(s), () => setPasting(true))
 	}, [])
 
-	// 换连接：旧的存一屏缩略图、藏起来，新的挂上
 	useEffect(() => {
 		const prev = current.current
 		if (prev && prev.host.id !== host?.id) prev.detach()
@@ -50,14 +51,14 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 			current.current = undefined
 			return
 		}
-		const s = session(host)
-		s.onTap = () => kb.current?.focus()
+		const s = getOrCreateSession(host)
+		s.onPlainTap = () => kb.current?.focus()
 		s.onImage = img => {
 			kb.current?.blur()
 			setPicture(img)
 		}
 		current.current = s
-		requestAnimationFrame(() => s.attach(panes.current!))
+		requestAnimationFrame(() => s.attach(sessionMount.current!))
 	}, [host?.id])
 
 	// 键盘弹出时界面只剩 visualViewport 那么高：抽屉缩到键盘上方，终端重算行列
@@ -68,7 +69,8 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 			const h = vv ? vv.height : window.innerHeight
 			el.style.height = `${h}px`
 			el.style.setProperty('--vv-top', `${vv ? vv.offsetTop : 0}px`)
-			el.style.setProperty('--safe-bottom', h < window.innerHeight - 80 ? '0px' : 'env(safe-area-inset-bottom)')
+			const keyboardOpen = h < window.innerHeight - KEYBOARD_MIN_PX
+			el.style.setProperty('--safe-bottom', keyboardOpen ? '0px' : 'env(safe-area-inset-bottom)')
 			current.current?.fitNow()
 		}
 		vv?.addEventListener('resize', layout)
@@ -82,7 +84,6 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		}
 	}, [])
 
-	// 把手往下拖：超过 120px 或甩得够快就收起
 	const grab = useRef({ y: 0, t: 0, active: false, onStatus: false })
 	const down = (e: PointerEvent) => {
 		grab.current = { y: e.clientY, t: e.timeStamp, active: true, onStatus: !!(e.target as HTMLElement).closest('.status') }
@@ -97,9 +98,8 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		const dy = e.clientY - grab.current.y
 		const v = dy / Math.max(1, e.timeStamp - grab.current.t)
 		setDrag(0)
-		// 点一下状态文字：开关连接日志
-		if (Math.abs(dy) < 6 && grab.current.onStatus) return setDebug(d => !d)
-		if (dy > 120 || (dy > 30 && v > 0.6)) {
+		if (Math.abs(dy) < TAP_SLOP_PX && grab.current.onStatus) return setDebug(d => !d)
+		if (dy > CLOSE_DRAG_PX || (dy > FLING_MIN_PX && v > FLING_PX_PER_MS)) {
 			current.current?.snapshot()
 			props.onClose()
 		}
@@ -120,8 +120,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 				<span class="title">{host?.name}</span>
 				<span class="status">{status(state, conn)}</span>
 			</header>
-			{/* 终端节点由 Session 自己挂进来，这里不放 Preact 管的子节点 */}
-			<div id="panes" ref={panes} />
+			<div id="panes" ref={sessionMount} />
 			{debug && (
 				<pre class="debug" onClick={() => setDebug(false)}>
 					{debugLines().join('\n')}
@@ -146,7 +145,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 			<div id="bar">
 				<div id="keys">
 					{KEYS.map(k => (
-						<button key={k.id} data-key={k.id} aria-pressed={k.id === 'ctrl' ? 'false' : undefined}>
+						<button key={k.id} data-key={k.id} aria-pressed={k.kind === 'ctrl' ? 'false' : undefined}>
 							{k.label}
 						</button>
 					))}
@@ -159,7 +158,6 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	)
 }
 
-// 读不到剪贴板时的退路：一个看得见的框，长按选「粘贴」，看一眼再发
 function PasteBox(props: { onSend: (text: string) => void; onCancel: () => void }) {
 	const [text, setText] = useState('')
 	return (
