@@ -301,6 +301,8 @@ try {
 	await check('点状态看日志', async () => {
 		await page.locator('#grab .status').click()
 		await until(() => page.locator('.debug').count(), '日志面板')
+		await until(async () => mocodLog.includes('光标行：「'), '日志里有光标行的属性')
+		console.log('    ', mocodLog.match(/光标行：[^\n]{0,160}/)[0])
 		await page.locator('.debug').click()
 	})
 	await check('键盘弹出·改大小：行数变少，收起恢复', async () => {

@@ -195,6 +195,30 @@ export class Session {
 		this.frozen = undefined
 	}
 
+	describeCursorRow() {
+		const b = this.term.buffer.active
+		const line = b.getLine(b.viewportY + b.cursorY)
+		if (!line) return '没有光标行'
+		const runs: string[] = []
+		let attrs = ''
+		let text = ''
+		const flush = () => text && runs.push(`「${text}」${attrs}`)
+		for (let x = 0; x < line.length; x++) {
+			const c = line.getCell(x)
+			if (!c) break
+			const fg = c.isFgRGB() ? `rgb#${c.getFgColor().toString(16).padStart(6, '0')}` : c.isFgPalette() ? `色${c.getFgColor()}` : '默认色'
+			const a = `${fg}${c.isDim() ? ' dim' : ''}${c.isItalic() ? ' 斜' : ''}${c.isInverse() ? ' 反' : ''}`
+			if (a !== attrs) {
+				flush()
+				attrs = a
+				text = ''
+			}
+			text += c.getChars() || ' '
+		}
+		flush()
+		return runs.join(' ')
+	}
+
 	snapshot() {
 		if (!this.opened || this.conn.state !== 'open') return
 		saveScreen(this.host.id, { html: this.serializer.serializeAsHTML({ includeGlobalBackground: true }), at: Date.now() })

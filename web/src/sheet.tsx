@@ -126,7 +126,10 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		const dy = e.clientY - grab.current.y
 		const v = dy / Math.max(1, e.timeStamp - grab.current.t)
 		setDrag(0)
-		if (Math.abs(dy) < TAP_SLOP_PX && grab.current.onStatus) return setDebug(d => !d)
+		if (Math.abs(dy) < TAP_SLOP_PX && grab.current.onStatus) {
+			if (!debug && current.current) dlog(`光标行：${current.current.describeCursorRow()}`)
+			return setDebug(d => !d)
+		}
 		if (dy > CLOSE_DRAG_PX || (dy > FLING_MIN_PX && v > FLING_PX_PER_MS)) {
 			current.current?.snapshot()
 			props.onClose()
