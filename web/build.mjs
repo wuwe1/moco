@@ -1,13 +1,15 @@
-// 打成一个自带 JS、CSS 的 dist/index.html：ttyd -I 只认一个文件
+// 打成一个自带 JS、CSS 的 dist/index.html，再把 public/ 里的 PWA 文件（manifest、sw.js、图标）原样拷过去
 import { build } from 'esbuild'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 
 const out = await build({
-	entryPoints: ['src/main.ts'],
+	entryPoints: ['src/main.tsx'],
 	bundle: true,
 	minify: true,
 	format: 'iife',
 	target: 'safari16',
+	jsx: 'automatic',
+	jsxImportSource: 'preact',
 	outdir: 'out',
 	write: false,
 })
@@ -18,4 +20,5 @@ const html = (await readFile('src/index.html', 'utf8'))
 	.replace('<!-- js -->', () => `<script>${js}</script>`)
 await mkdir('dist', { recursive: true })
 await writeFile('dist/index.html', html)
+await cp('public', 'dist', { recursive: true })
 console.log(`dist/index.html ${(html.length / 1024).toFixed(0)} KB`)

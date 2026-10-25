@@ -5,10 +5,11 @@ import type { Terminal } from '@xterm/xterm'
 // 框里常驻一个零宽字符：框是空的时候 iOS 不报删除，退格就发不出去
 const SENTINEL = '​'
 
-export function keyboard(term: Terminal, send: (s: string) => void) {
-	const input = document.getElementById('input') as HTMLTextAreaElement
-	const compose = document.getElementById('compose') as HTMLDivElement
-	const ctrlBtn = document.querySelector('[data-key="ctrl"]') as HTMLButtonElement
+// root 是终端抽屉：按键栏、输入框都在里面；term 取当前打开的那个连接的终端
+export function keyboard(root: HTMLElement, term: () => Terminal | undefined, send: (s: string) => void) {
+	const input = root.querySelector('#input') as HTMLTextAreaElement
+	const compose = root.querySelector('#compose') as HTMLDivElement
+	const ctrlBtn = root.querySelector('[data-key="ctrl"]') as HTMLButtonElement
 	let ctrl = false
 
 	const setCtrl = (on: boolean) => {
@@ -19,7 +20,7 @@ export function keyboard(term: Terminal, send: (s: string) => void) {
 		input.value = SENTINEL
 		input.setSelectionRange(1, 1)
 	}
-	const arrow = (c: string) => (term.modes.applicationCursorKeysMode ? '\x1bO' : '\x1b[') + c
+	const arrow = (c: string) => (term()?.modes.applicationCursorKeysMode ? '\x1bO' : '\x1b[') + c
 	const toCtrl = (c: string) => {
 		const code = c.toUpperCase().charCodeAt(0)
 		if (code >= 64 && code <= 95) return String.fromCharCode(code - 64)
@@ -36,7 +37,7 @@ export function keyboard(term: Terminal, send: (s: string) => void) {
 	}
 	const paste = (s: string) => {
 		s = s.replace(/\r?\n/g, '\r')
-		send(term.modes.bracketedPasteMode ? `\x1b[200~${s}\x1b[201~` : s)
+		send(term()?.modes.bracketedPasteMode ? `\x1b[200~${s}\x1b[201~` : s)
 	}
 
 	const keys: Record<string, () => string> = {
@@ -99,7 +100,7 @@ export function keyboard(term: Terminal, send: (s: string) => void) {
 	input.addEventListener('focus', reset)
 
 	// 按键栏：pointerdown 就触发并拦掉默认行为，焦点留在输入框里，键盘不会收起
-	for (const btn of document.querySelectorAll<HTMLButtonElement>('#keys button')) {
+	for (const btn of root.querySelectorAll<HTMLButtonElement>('#keys button')) {
 		const key = btn.dataset.key!
 		let hold = 0
 		const stop = () => {
@@ -119,7 +120,7 @@ export function keyboard(term: Terminal, send: (s: string) => void) {
 		btn.addEventListener('pointerleave', stop)
 	}
 
-	const kbd = document.getElementById('kbd') as HTMLButtonElement
+	const kbd = root.querySelector('#kbd') as HTMLButtonElement
 	kbd.addEventListener('pointerdown', e => {
 		e.preventDefault()
 		if (document.activeElement === input) input.blur()
@@ -127,5 +128,5 @@ export function keyboard(term: Terminal, send: (s: string) => void) {
 	})
 
 	reset()
-	return { focus: () => input.focus() }
+	return { focus: () => input.focus(), blur: () => input.blur() }
 }
