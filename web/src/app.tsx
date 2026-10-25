@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'preact/hooks'
 import { deviceKey, fingerprint } from './keys'
+import { Check, ChevronLeft, Ellipsis, KeyRound, Minus, Plus, Settings, Type } from 'lucide-preact'
 import { FONTS, type FontKey } from './fonts'
-import { connOf, dropSession, setFontFamilyForAllSessions, useRerenderOnSessionChange } from './session'
+import { connOf, dropSession, setFontFamilyForAllSessions, setFontSizeForAllSessions, useRerenderOnSessionChange } from './session'
 import { Sheet } from './sheet'
-import { deviceName, dropScreen, fontKey, loadHosts, loadScreen, normalizeUrl, saveHosts, setDeviceName, type Host } from './store'
+import { deviceName, dropScreen, FONT_MAX, FONT_MIN, fontKey, fontSize, loadHosts, loadScreen, normalizeUrl, saveHosts, setDeviceName, type Host } from './store'
 
 type Health = 'checking' | 'online' | 'offline'
 
@@ -12,6 +13,7 @@ export function App() {
 	const [hosts, setHosts] = useState(loadHosts)
 	const [active, setActive] = useState<Host>()
 	const [adding, setAdding] = useState<{ url?: string } | undefined>(hosts.length ? undefined : {})
+	const [settings, setSettings] = useState(false)
 
 	const update = (next: Host[]) => {
 		saveHosts(next)
@@ -37,7 +39,8 @@ export function App() {
 
 	return (
 		<>
-			<Home hosts={hosts} onOpen={open} onAdd={() => setAdding({})} onRemove={remove} hidden={!!adding} />
+			<Home hosts={hosts} onOpen={open} onAdd={() => setAdding({})} onRemove={remove} onSettings={() => setSettings(true)} hidden={!!adding || settings} />
+			{settings && <SettingsPage onBack={() => setSettings(false)} />}
 			{adding && <Add initialUrl={adding.url} canCancel={hosts.length > 0} onCancel={() => setAdding(undefined)} onAdded={addReplacingSameUrl} />}
 			<Sheet
 				host={active}
@@ -74,21 +77,32 @@ function useHealth(hosts: Host[]) {
 	return health
 }
 
-function Home(props: { hosts: Host[]; hidden: boolean; onOpen: (h: Host) => void; onAdd: () => void; onRemove: (h: Host) => void }) {
+function Home(props: {
+	hosts: Host[]
+	hidden: boolean
+	onOpen: (h: Host) => void
+	onAdd: () => void
+	onRemove: (h: Host) => void
+	onSettings: () => void
+}) {
 	const health = useHealth(props.hosts)
-	const [fp, setFp] = useState('')
 	useRerenderOnSessionChange()
-	useEffect(() => {
-		fingerprint().then(setFp, () => setFp(''))
-	}, [])
 	const sorted = [...props.hosts].sort((a, b) => (b.lastUsed ?? b.added) - (a.lastUsed ?? a.added))
 
 	return (
 		<main id="home" hidden={props.hidden}>
 			<header class="topbar">
 				<h1>moco{import.meta.env.DEV && <span class="dev">dev</span>}</h1>
-				<button class="icon" aria-label="添加电脑" onClick={props.onAdd}>＋</button>
+				<div class="actions">
+					<button class="round" aria-label="设置" onClick={props.onSettings}>
+						<Settings size={20} />
+					</button>
+					<button class="round" aria-label="添加电脑" onClick={props.onAdd}>
+						<Plus size={20} />
+					</button>
+				</div>
 			</header>
+			<h2 class="section">电脑</h2>
 			<ul class="hosts">
 				{sorted.map(h => {
 					const live = connOf(h.id)?.state
@@ -96,17 +110,10 @@ function Home(props: { hosts: Host[]; hidden: boolean; onOpen: (h: Host) => void
 					const screen = loadScreen(h.id)
 					return (
 						<li key={h.id} class="host" onClick={() => props.onOpen(h)}>
-							<div class="thumb">
-								{screen ? (
-									<img src={screen.image} alt="" />
-								) : (
-									<span class="empty">还没打开过</span>
-								)}
-							</div>
+							<div class="thumb">{screen ? <img src={screen.image} alt="" /> : <span class="empty">还没打开过</span>}</div>
 							<div class="meta">
 								<span class="dot" data-state={dot} />
 								<span class="name">{h.name}</span>
-								<span class="addr">{new URL(h.url).hostname}</span>
 								<button
 									class="more"
 									aria-label="删除"
@@ -115,41 +122,82 @@ function Home(props: { hosts: Host[]; hidden: boolean; onOpen: (h: Host) => void
 										props.onRemove(h)
 									}}
 								>
-									⋯
+									<Ellipsis size={18} />
 								</button>
 							</div>
+							<div class="addr">{new URL(h.url).hostname}</div>
 						</li>
 					)
 				})}
 			</ul>
-			<footer class="device">
-				<FontPicker />
-				{fp && <div>这台手机的密钥 {fp}</div>}
-			</footer>
 		</main>
 	)
 }
 
-function FontPicker() {
+function SettingsPage(props: { onBack: () => void }) {
 	const [font, setFont] = useState(fontKey)
+	const [size, setSize] = useState(fontSize)
+	const [fp, setFp] = useState('')
+	useEffect(() => {
+		fingerprint().then(setFp, () => setFp(''))
+	}, [])
+	const resize = (n: number) => {
+		const next = Math.min(FONT_MAX, Math.max(FONT_MIN, n))
+		setSize(next)
+		setFontSizeForAllSessions(next)
+	}
+
 	return (
-		<label class="picker">
-			终端字体
-			<select
-				value={font}
-				onChange={e => {
-					const k = e.currentTarget.value as FontKey
-					setFont(k)
-					setFontFamilyForAllSessions(k)
-				}}
-			>
-				{Object.entries(FONTS).map(([k, f]) => (
-					<option key={k} value={k}>
-						{f.label}
-					</option>
+		<main id="settings">
+			<header class="topbar">
+				<button class="round" aria-label="返回" onClick={props.onBack}>
+					<ChevronLeft size={22} />
+				</button>
+				<h1>设置</h1>
+				<span />
+			</header>
+			<h2 class="section">终端文字</h2>
+			<div class="group">
+				<div class="row">
+					<Type size={20} class="lead" />
+					<span class="label">字号</span>
+					<span class="stepper">
+						<button aria-label="小一号" onClick={() => resize(size - 1)} disabled={size <= FONT_MIN}>
+							<Minus size={18} />
+						</button>
+						<span class="value">{size}</span>
+						<button aria-label="大一号" onClick={() => resize(size + 1)} disabled={size >= FONT_MAX}>
+							<Plus size={18} />
+						</button>
+					</span>
+				</div>
+			</div>
+			<h2 class="section">字体</h2>
+			<div class="group">
+				{(Object.keys(FONTS) as FontKey[]).map(k => (
+					<button
+						key={k}
+						class="row"
+						aria-pressed={font === k}
+						onClick={() => {
+							setFont(k)
+							setFontFamilyForAllSessions(k)
+						}}
+					>
+						<span class="label">{FONTS[k].label}</span>
+						{font === k && <Check size={20} class="check" />}
+					</button>
 				))}
-			</select>
-		</label>
+			</div>
+			<h2 class="section">这台手机</h2>
+			<div class="group">
+				<div class="row">
+					<KeyRound size={20} class="lead" />
+					<span class="label">密钥指纹</span>
+					<span class="value mono">{fp}</span>
+				</div>
+			</div>
+		</main>
 	)
 }
 

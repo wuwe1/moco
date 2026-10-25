@@ -40,20 +40,26 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	const [typing, setTyping] = useState(false)
 	const [toast, setToast] = useState<string>()
 	const picker = useRef<HTMLInputElement>(null)
-	const sendImage = async (file: File) => {
+	const sendImages = async (files: File[]) => {
 		const conn = current.current?.conn
 		if (!conn) return
-		setToast('图片上传中…')
-		try {
-			const path = await conn.upload(await shrinkImage(file))
-			dlog(`图片传到 ${path}`)
-			setToast(undefined)
-			kb.current?.paste(path + ' ')
-		} catch (e) {
-			dlog(`图片没传上去：${e}`)
-			setToast(`图片没传上去：${e instanceof Error ? e.message : e}`)
-			setTimeout(() => setToast(undefined), TOAST_MS)
+		const paths: string[] = []
+		const failed: string[] = []
+		for (const [i, file] of files.entries()) {
+			setToast(files.length > 1 ? `图片上传中 ${i + 1}/${files.length}…` : '图片上传中…')
+			try {
+				const path = await conn.upload(await shrinkImage(file))
+				dlog(`图片传到 ${path}`)
+				paths.push(path)
+			} catch (e) {
+				dlog(`图片没传上去：${e}`)
+				failed.push(e instanceof Error ? e.message : String(e))
+			}
 		}
+		if (paths.length) kb.current?.paste(paths.join(' ') + ' ')
+		if (!failed.length) return setToast(undefined)
+		setToast(`${failed.length} 张没传上去：${failed[0]}`)
+		setTimeout(() => setToast(undefined), TOAST_MS)
 	}
 	const [, bump] = useState(0)
 	useEffect(() => (debug ? onDebug(() => bump(n => n + 1)) : undefined), [debug])
@@ -127,7 +133,11 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		const v = dy / Math.max(1, e.timeStamp - grab.current.t)
 		setDrag(0)
 		if (Math.abs(dy) < TAP_SLOP_PX && grab.current.onStatus) {
-			if (!debug && current.current) dlog(`光标行：${current.current.describeCursorRow()}`)
+			const s = current.current
+			if (!debug && s) {
+				dlog(`光标行：${s.describeCursorRow()}`)
+				dlog(`鼠标上报：${s.term.modes.mouseTrackingMode}，屏幕：${s.term.buffer.active.type === 'alternate' ? '全屏' : '普通'}`)
+			}
 			return setDebug(d => !d)
 		}
 		if (dy > CLOSE_DRAG_PX || (dy > FLING_MIN_PX && v > FLING_PX_PER_MS)) {
@@ -177,11 +187,12 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 				ref={picker}
 				type="file"
 				accept="image/*"
+				multiple
 				hidden
 				onChange={e => {
-					const file = e.currentTarget.files?.[0]
+					const files = [...(e.currentTarget.files ?? [])]
 					e.currentTarget.value = ''
-					if (file) sendImage(file)
+					if (files.length) sendImages(files)
 				}}
 			/>
 			<div id="compose" hidden />

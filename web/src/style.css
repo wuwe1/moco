@@ -70,7 +70,7 @@ button.icon { font-size: 22px; font-weight: 300; }
 .dot[data-state="open"], .dot[data-state="online"] { background: var(--ok); }
 .dot[data-state="closed"], .dot[data-state="unauthorized"] { background: var(--down); }
 
-#home, #add {
+#home, #add, #settings {
 	position: absolute;
 	inset: 0;
 	overflow-y: auto;
@@ -94,29 +94,42 @@ button.icon { font-size: 22px; font-weight: 300; }
 #home .topbar h1 { font-size: 22px; letter-spacing: -.01em; }
 .topbar > :last-child { justify-self: end; }
 
+.section {
+	margin: 18px 20px 8px;
+	color: var(--muted);
+	font-size: 13px;
+	font-weight: 500;
+}
+.actions { display: flex; gap: 8px; }
+button.round {
+	min-width: 0;
+	width: 38px;
+	height: 38px;
+	padding: 0;
+	border-radius: 50%;
+	display: inline-grid;
+	place-items: center;
+}
+
 .hosts {
 	list-style: none;
 	margin: 0;
-	padding: 4px 12px 12px;
+	padding: 0 16px 16px;
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-	gap: 10px;
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	gap: 18px 12px;
 }
-.host {
-	overflow: hidden;
-	border: 1px solid var(--line);
-	border-radius: 10px;
-	background: var(--surface);
-}
-.host:active { border-color: var(--key-on); }
-
+.host { min-width: 0; }
 .thumb {
 	position: relative;
-	aspect-ratio: 16 / 9;
+	aspect-ratio: 5 / 8;
 	overflow: hidden;
+	border: 1px solid var(--line);
+	border-radius: 12px;
 	background: var(--term);
 	pointer-events: none;
 }
+.host:active .thumb { border-color: var(--key-on); }
 .thumb img { display: block; width: 100%; }
 .thumb .empty {
 	position: absolute;
@@ -129,41 +142,67 @@ button.icon { font-size: 22px; font-weight: 300; }
 .meta {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	height: 40px;
-	padding: 0 4px 0 12px;
-	border-top: 1px solid var(--line);
+	gap: 6px;
+	height: 32px;
+	margin-top: 6px;
+	padding-left: 2px;
 }
-.meta .name { font-weight: 600; }
-.meta .addr {
+.meta .name {
 	flex: 1;
 	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 600;
+}
+.meta .more { min-width: 32px; height: 32px; padding: 0; background: none; color: var(--muted); display: inline-grid; place-items: center; }
+.host .addr {
+	padding-left: 16px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	color: var(--muted);
 	font: 12px var(--mono);
 }
-.meta .more { background: none; color: var(--muted); min-width: 36px; font-size: 18px; }
 
-.device {
-	display: grid;
-	gap: 10px;
-	justify-items: center;
-	padding: 8px 16px 16px;
-	color: var(--muted);
-	font: 11px var(--mono);
-	text-align: center;
+#settings .group {
+	margin: 0 16px;
+	overflow: hidden;
+	border-radius: 12px;
+	background: var(--surface);
 }
-.picker { display: flex; align-items: center; gap: 8px; font: 13px var(--sans); }
-.picker select {
-	font: 16px var(--sans);
-	color: var(--fg);
-	background: var(--key);
+#settings .row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 52px;
+	height: auto;
+	padding: 0 14px;
 	border: 0;
-	border-radius: 7px;
-	padding: 4px 8px;
+	border-top: 1px solid var(--line);
+	border-radius: 0;
+	background: none;
+	color: var(--fg);
+	font: 16px var(--sans);
+	text-align: left;
 }
+#settings .row:first-child { border-top: 0; }
+#settings button.row:active { background: var(--key); }
+#settings .lead { color: var(--muted); flex: none; }
+#settings .label { flex: 1; }
+#settings .value { color: var(--muted); }
+#settings .mono { font-family: var(--mono); }
+#settings .check { color: var(--ok); }
+.stepper {
+	display: flex;
+	align-items: center;
+	border-radius: 999px;
+	background: var(--key);
+}
+.stepper button { min-width: 0; width: 40px; height: 36px; padding: 0; background: none; display: inline-grid; place-items: center; }
+.stepper .value { min-width: 28px; text-align: center; color: var(--fg) !important; font-variant-numeric: tabular-nums; }
 
 #add form {
 	display: flex;

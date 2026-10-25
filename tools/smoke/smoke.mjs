@@ -224,7 +224,7 @@ try {
 		for (const [name, c] of alphas) if (!/(0\.5\)|\/ ?0\.5\))$/.test(c)) throw new Error(`${name} 不灰：${c}`)
 		if (alphas.length < 3) throw new Error('没找到灰字 ' + JSON.stringify(alphas))
 	})
-	await check('图片键：选图传到电脑，路径粘贴进终端', async () => {
+	await check('图片键：一次选两张，传到电脑，路径都粘贴进终端', async () => {
 		const pngOf = (w, h) => page.evaluate(([w, h]) => {
 			const c = document.createElement('canvas')
 			c.width = w
@@ -234,18 +234,19 @@ try {
 			g.fillRect(0, 0, w, h)
 			return c.toDataURL('image/png').split(',')[1]
 		}, [w, h]).then(b => Buffer.from(b, 'base64'))
-		const pick = async (name, buffer) => {
-			const chooser = page.waitForEvent('filechooser')
-			await key('image')
-			await (await chooser).setFiles({ name, mimeType: 'image/png', buffer })
-			const before = (await screenText()).match(/\/moco\/[\d-]+\.png/g)?.length ?? 0
-			await until(async () => ((await screenText()).match(/\/moco\/[\d-]+\.png/g)?.length ?? 0) > before, '路径出现在终端里')
-			const paths = (await screenText()).replace(/\s+/g, ' ').match(/\/\S*?\/moco\/[\d-]+\.png/g)
-			return readFileSync(paths.at(-1))
-		}
+		const pathCount = async () => (await screenText()).match(/\/moco\/[\d-]+\.png/g)?.length ?? 0
 		const small = await pngOf(4, 4)
-		if (!(await pick('small.png', small)).equals(small)) throw new Error('小图存下来的内容不一样')
-		const big = await pick('big.png', await pngOf(3000, 1200))
+		const before = await pathCount()
+		const chooser = page.waitForEvent('filechooser')
+		await key('image')
+		await (await chooser).setFiles([
+			{ name: 'small.png', mimeType: 'image/png', buffer: small },
+			{ name: 'big.png', mimeType: 'image/png', buffer: await pngOf(3000, 1200) },
+		])
+		await until(async () => (await pathCount()) >= before + 2, '两个路径都出现在终端里')
+		const paths = (await screenText()).replace(/\s+/g, ' ').match(/\/\S*?\/moco\/[\d-]+\.png/g).slice(-2)
+		if (!readFileSync(paths[0]).equals(small)) throw new Error('小图存下来的内容不一样')
+		const big = readFileSync(paths[1])
 		const w = big.readUInt32BE(16), h = big.readUInt32BE(20)
 		if (w !== 2000 || h !== 800) throw new Error(`大图存成了 ${w}×${h}`)
 		await page.keyboard.press('Control+u')
@@ -301,9 +302,18 @@ try {
 		if (img[0] !== 'data:image/png;base64,' || img[1] < 300) throw new Error('缩略图不对：' + img)
 		await until(async () => (await page.locator('.host .dot').getAttribute('data-state')) === 'open', '首页圆点 open')
 	})
-	await check('首页换字体', async () => {
-		await page.selectOption('.picker select', 'jetbrains')
+	await check('设置页：换字体、调字号', async () => {
+		await page.click('#home [aria-label="设置"]')
+		await page.click('#settings .row:has-text("JetBrains Mono")')
 		await until(() => page.evaluate(() => localStorage.getItem('moco.fontFamily') === 'jetbrains'), '存下字体')
+		const size = () => page.locator('#settings .stepper .value').textContent()
+		const before = Number(await size())
+		await page.click('#settings [aria-label="大一号"]')
+		if (Number(await size()) !== before + 1) throw new Error('字号没变大')
+		if ((await page.evaluate(() => localStorage.getItem('moco.fontSize'))) !== String(before + 1)) throw new Error('字号没存下')
+		await page.click('#settings [aria-label="小一号"]')
+		await page.click('#settings [aria-label="返回"]')
+		await until(async () => !(await page.locator('#settings').count()), '回到首页')
 	})
 	await check('再打开还连着', async () => {
 		await page.click('.host')

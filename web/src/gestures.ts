@@ -1,8 +1,7 @@
 import type { Terminal } from '@xterm/xterm'
 import { grid } from './grid'
+import { FONT_MAX, FONT_MIN } from './store'
 
-const FONT_MIN = 9
-const FONT_MAX = 24
 const WHEEL_PER_FRAME = 3
 
 export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: number, y: number) => void; onFont: (size: number) => void }) {

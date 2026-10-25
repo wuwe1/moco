@@ -2,9 +2,8 @@ import type { IBufferCell, Terminal } from '@xterm/xterm'
 import { grid } from './grid'
 import { wireTheme } from './theme'
 
-const WIDTH_PX = 360
+const WIDTH_PX = 240
 const PIXEL_RATIO = 2
-const ASPECT = 9 / 16
 
 const LEVELS = [0, 95, 135, 175, 215, 255]
 const hex = (r: number, g: number, b: number) => `rgb(${r},${g},${b})`
@@ -23,7 +22,7 @@ export function renderThumbnail(term: Terminal): string | undefined {
 	if (!g) return
 	const cw = WIDTH_PX / term.cols
 	const ch = cw * (g.ch / g.cw)
-	const rows = Math.min(term.rows, Math.ceil((WIDTH_PX * ASPECT) / ch))
+	const rows = term.rows
 	const canvas = document.createElement('canvas')
 	canvas.width = WIDTH_PX * PIXEL_RATIO
 	canvas.height = Math.ceil(rows * ch * PIXEL_RATIO)

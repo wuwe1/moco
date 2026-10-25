@@ -102,7 +102,7 @@ export class Session {
 		this.opened = true
 		this.term.open(this.el)
 		this.images.mount()
-		gestures(this.el, this.term, { onTap: (x, y) => this.tap(x, y), onFont: setFontForAllSessions })
+		gestures(this.el, this.term, { onTap: (x, y) => this.tap(x, y), onFont: setFontSizeForAllSessions })
 	}
 
 	private tap(x: number, y: number) {
@@ -201,7 +201,7 @@ export class Session {
 	}
 }
 
-function setFontForAllSessions(size: number) {
+export function setFontSizeForAllSessions(size: number) {
 	setFontSize(size)
 	sessions.forEach(s => {
 		s.term.options.fontSize = size

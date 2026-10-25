@@ -48,6 +48,8 @@ export function dropScreen(id: string) {
 	localStorage.removeItem(screenKey(id))
 }
 
+export const FONT_MIN = 9
+export const FONT_MAX = 24
 export const fontSize = () => Number(localStorage.getItem(FONT)) || 13
 export const setFontSize = (n: number) => localStorage.setItem(FONT, String(n))
 
