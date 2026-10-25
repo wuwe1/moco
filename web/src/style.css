@@ -285,8 +285,9 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 	padding: 0 4px;
 	transition: opacity .2s, transform .25s var(--ease);
 }
-/* xterm.js 6.0.0 的 DOM 渲染器：真彩色的字把颜色写在 style 上，盖掉了 .xterm-dim 的半透明色（herdr 发的全是真彩色） */
-.pane .xterm-rows .xterm-dim:is([style^="color:"], [style*=";color:"]) {
+/* xterm.js 6.0.0 的 DOM 渲染器：真彩色的字把颜色写在 style 上，盖掉了 .xterm-dim 的半透明色（herdr 发的全是真彩色）。
+   宽字符还会设 letter-spacing，style 被浏览器重排成 "; color: rgb(…)" 的写法 */
+.pane .xterm-rows .xterm-dim:is([style^="color"], [style*=";color"], [style*="; color"]) {
 	-webkit-text-fill-color: color-mix(in srgb, currentColor 50%, transparent);
 }
 .pane .frozen { position: absolute; z-index: 10; background: var(--term); }

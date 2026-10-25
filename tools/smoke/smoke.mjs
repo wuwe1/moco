@@ -202,14 +202,14 @@ try {
 		if (count(await screenText(), 'aZb')) throw new Error('划动时发了方向键')
 	})
 	await check('灰字（SGR 2）：真彩色的也是半透明', async () => {
-		await page.keyboard.type("printf 'n0 \\033[2mDIM1\\033[0m \\033[2;38;2;235;219;178mDIM2\\033[0m\\n'")
+		await page.keyboard.type("printf 'n0 \\033[2mDIM1\\033[0m \\033[2;38;2;235;219;178mDIM2\\033[0m \\033[2;38;2;214;216;224;48;2;30;30;30m灰字\\033[0m\\n'")
 		await page.keyboard.press('Enter')
-		await until(async () => (await screenText()).includes('DIM2 '), 'DIM2')
-		const alphas = await page.evaluate(() => [...document.querySelectorAll('.pane:not([hidden]) .xterm-rows span')]
-			.filter(s => /^DIM[12]$/.test(s.textContent.trim()))
+		await until(async () => (await screenText()).split('灰字').length > 2, '灰字')
+		const alphas = await page.evaluate(() => [...document.querySelectorAll('.pane:not([hidden]) .xterm-rows span.xterm-dim')]
+			.filter(s => /^(DIM[12]|灰字)$/.test(s.textContent.trim()))
 			.map(s => [s.textContent.trim(), getComputedStyle(s).webkitTextFillColor]))
 		for (const [name, c] of alphas) if (!/(0\.5\)|\/ ?0\.5\))$/.test(c)) throw new Error(`${name} 不灰：${c}`)
-		if (alphas.length < 2) throw new Error('没找到灰字 ' + JSON.stringify(alphas))
+		if (alphas.length < 3) throw new Error('没找到灰字 ' + JSON.stringify(alphas))
 	})
 	await check('图片键：选图传到电脑，路径粘贴进终端', async () => {
 		const pngOf = (w, h) => page.evaluate(([w, h]) => {
