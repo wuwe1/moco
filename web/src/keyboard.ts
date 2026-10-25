@@ -1,5 +1,5 @@
 import type { Terminal } from '@xterm/xterm'
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowRightToLine, ArrowUp, ClipboardPaste, CornerDownLeft, type LucideIcon } from 'lucide-preact'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowRightToLine, ArrowUp, ClipboardPaste, CornerDownLeft, ImagePlus, type LucideIcon } from 'lucide-preact'
 import { dlog } from './debug'
 
 // 框里常驻一个零宽字符：框是空的时候 iOS 不报删除，退格就发不出去
@@ -9,7 +9,7 @@ const arrow = (c: string) => (t?: Terminal) => (t?.modes.applicationCursorKeysMo
 
 type Face = { id: string; label: string; icon?: LucideIcon; pinned?: boolean }
 type SendKey = Face & { kind: 'send'; seq: (t?: Terminal) => string; repeat?: boolean }
-type Key = SendKey | (Face & { kind: 'ctrl' | 'paste' })
+type Key = SendKey | (Face & { kind: 'ctrl' | 'paste' | 'image' })
 export const KEYS: Key[] = [
 	{ kind: 'send', id: 'esc', label: 'Esc', seq: () => '\x1b' },
 	{ kind: 'send', id: 'tab', label: 'Tab', icon: ArrowRightToLine, seq: () => '\t' },
@@ -21,6 +21,7 @@ export const KEYS: Key[] = [
 	{ kind: 'send', id: 'down', label: '下', icon: ArrowDown, seq: arrow('B'), repeat: true },
 	{ kind: 'send', id: 'right', label: '右', icon: ArrowRight, seq: arrow('C'), repeat: true },
 	{ kind: 'paste', id: 'paste', label: '粘贴', icon: ClipboardPaste },
+	{ kind: 'image', id: 'image', label: '图片', icon: ImagePlus },
 	{ kind: 'send', id: 'enter', label: '回车', icon: CornerDownLeft, seq: () => '\r', pinned: true },
 ]
 const keyById = new Map(KEYS.map(k => [k.id, k]))
@@ -80,7 +81,14 @@ function pressable(btn: HTMLElement, on: { release?: () => void; click?: () => v
 		})
 }
 
-export function keyboard(root: HTMLElement, term: () => Terminal | undefined, send: (s: string) => void, onPasteFailed: () => void) {
+type Hooks = {
+	term: () => Terminal | undefined
+	send: (s: string) => void
+	onPasteFailed: () => void
+	onPickImage: () => void
+}
+
+export function keyboard(root: HTMLElement, { term, send, onPasteFailed, onPickImage }: Hooks) {
 	const input = root.querySelector('#input') as HTMLTextAreaElement
 	const compose = root.querySelector('#compose') as HTMLDivElement
 	const ctrlBtn = root.querySelector('[data-key="ctrl"]') as HTMLButtonElement
@@ -176,7 +184,8 @@ export function keyboard(root: HTMLElement, term: () => Terminal | undefined, se
 			const fire = () => send(key.seq(term()))
 			pressable(btn, { release: fire, repeat: key.repeat ? fire : undefined })
 		} else if (key.kind === 'ctrl') pressable(btn, { release: () => setCtrl(!ctrl) })
-		else pressable(btn, { click: readClipboard })
+		else if (key.kind === 'paste') pressable(btn, { click: readClipboard })
+		else pressable(btn, { click: onPickImage })
 	}
 
 	pressable(root.querySelector<HTMLButtonElement>('#kbd')!, {

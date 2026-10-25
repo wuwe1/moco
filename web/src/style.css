@@ -327,6 +327,20 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 	text-overflow: ellipsis;
 }
 
+.toast {
+	position: absolute;
+	left: 50%;
+	bottom: calc(48px + var(--safe-bottom, env(safe-area-inset-bottom)) + 10px);
+	transform: translateX(-50%);
+	max-width: calc(100% - 32px);
+	padding: 6px 12px;
+	border-radius: 8px;
+	background: var(--key-on);
+	color: var(--fg);
+	font-size: 13px;
+	z-index: 20;
+}
+
 #bar {
 	position: relative;
 	display: flex;

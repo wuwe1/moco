@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium } from 'playwright-core'
@@ -210,6 +210,32 @@ try {
 			.map(s => [s.textContent.trim(), getComputedStyle(s).webkitTextFillColor]))
 		for (const [name, c] of alphas) if (!/(0\.5\)|\/ ?0\.5\))$/.test(c)) throw new Error(`${name} 不灰：${c}`)
 		if (alphas.length < 2) throw new Error('没找到灰字 ' + JSON.stringify(alphas))
+	})
+	await check('图片键：选图传到电脑，路径粘贴进终端', async () => {
+		const pngOf = (w, h) => page.evaluate(([w, h]) => {
+			const c = document.createElement('canvas')
+			c.width = w
+			c.height = h
+			const g = c.getContext('2d')
+			g.fillStyle = '#c33'
+			g.fillRect(0, 0, w, h)
+			return c.toDataURL('image/png').split(',')[1]
+		}, [w, h]).then(b => Buffer.from(b, 'base64'))
+		const pick = async (name, buffer) => {
+			const chooser = page.waitForEvent('filechooser')
+			await key('image')
+			await (await chooser).setFiles({ name, mimeType: 'image/png', buffer })
+			const before = (await screenText()).match(/\/moco\/[\d-]+\.png/g)?.length ?? 0
+			await until(async () => ((await screenText()).match(/\/moco\/[\d-]+\.png/g)?.length ?? 0) > before, '路径出现在终端里')
+			const paths = (await screenText()).replace(/\s+/g, ' ').match(/\/\S*?\/moco\/[\d-]+\.png/g)
+			return readFileSync(paths.at(-1))
+		}
+		const small = await pngOf(4, 4)
+		if (!(await pick('small.png', small)).equals(small)) throw new Error('小图存下来的内容不一样')
+		const big = await pick('big.png', await pngOf(3000, 1200))
+		const w = big.readUInt32BE(16), h = big.readUInt32BE(20)
+		if (w !== 2000 || h !== 800) throw new Error(`大图存成了 ${w}×${h}`)
+		await page.keyboard.press('Control+u')
 	})
 	await check('kitty 图：画在 canvas 上', async () => {
 		const red = Buffer.from(Array(16).fill([255, 0, 0]).flat()).toString('base64')

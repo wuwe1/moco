@@ -153,6 +153,9 @@ type message struct {
 	Cols  uint16 `json:"cols,omitempty"`
 	Rows  uint16 `json:"rows,omitempty"`
 	Code  *int   `json:"code,omitempty"`
+	ID    uint32 `json:"id,omitempty"`
+	Path  string `json:"path,omitempty"`
+	Error string `json:"error,omitempty"`
 
 	Theme screen.Theme `json:"theme,omitzero"`
 	Cell  *cellSize    `json:"cell,omitempty"` // v2：手机上一格多少 CSS 像素，回答 CSI 16 t 用
@@ -194,6 +197,7 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 		c.Close(CloseUnauthorized, err.Error())
 		return
 	}
+	c.SetReadLimit(maxUpload + 5)
 	go auth.Touch(hello.Key)
 	cols, rows := hello.Cols, hello.Rows
 
@@ -365,6 +369,8 @@ func (s *Server) pump(ctx context.Context, c *websocket.Conn, sess *term.Session
 			if json.Unmarshal(data[1:], &sz) == nil && sz.Cols > 0 && sz.Rows > 0 {
 				sess.Resize(sz.Cols, sz.Rows)
 			}
+		case msgUpload:
+			s.upload(ctx, c, data)
 		}
 	}
 }

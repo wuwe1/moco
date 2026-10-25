@@ -4,6 +4,7 @@ import { debugLines, dlog, onDebug } from './debug'
 import { Keyboard, KeyboardOff } from 'lucide-preact'
 import { KEYS, keyboard } from './keyboard'
 import { Lightbox, type Picture } from './lightbox'
+import { shrinkImage } from './shrink'
 import { connOf, getOrCreateSession, useRerenderOnSessionChange, type Session } from './session'
 import { KEYBOARD_MODES, keyboardMode, type Host } from './store'
 
@@ -37,12 +38,34 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	const [picture, setPicture] = useState<Picture>()
 	const [pasting, setPasting] = useState(false)
 	const [typing, setTyping] = useState(false)
+	const [toast, setToast] = useState<string>()
+	const picker = useRef<HTMLInputElement>(null)
+	const sendImage = async (file: File) => {
+		const conn = current.current?.conn
+		if (!conn) return
+		setToast('图片上传中…')
+		try {
+			const path = await conn.upload(await shrinkImage(file))
+			dlog(`图片传到 ${path}`)
+			setToast(undefined)
+			kb.current?.paste(path + ' ')
+		} catch (e) {
+			dlog(`图片没传上去：${e}`)
+			setToast(`图片没传上去：${e instanceof Error ? e.message : e}`)
+			setTimeout(() => setToast(undefined), TOAST_MS)
+		}
+	}
 	const [, bump] = useState(0)
 	useEffect(() => (debug ? onDebug(() => bump(n => n + 1)) : undefined), [debug])
 	useRerenderOnSessionChange()
 
 	useEffect(() => {
-		kb.current = keyboard(root.current!, () => current.current?.term, s => current.current?.conn.send(s), () => setPasting(true))
+		kb.current = keyboard(root.current!, {
+			term: () => current.current?.term,
+			send: s => current.current?.conn.send(s),
+			onPasteFailed: () => setPasting(true),
+			onPickImage: () => picker.current?.click(),
+		})
 	}, [])
 
 	useEffect(() => {
@@ -146,6 +169,18 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 					onCancel={() => setPasting(false)}
 				/>
 			)}
+			{toast && <div class="toast">{toast}</div>}
+			<input
+				ref={picker}
+				type="file"
+				accept="image/*"
+				hidden
+				onChange={e => {
+					const file = e.currentTarget.files?.[0]
+					e.currentTarget.value = ''
+					if (file) sendImage(file)
+				}}
+			/>
 			<div id="compose" hidden />
 			<div id="bar">
 				<div id="keys">{KEYS.filter(k => !k.pinned).map(keyButton)}</div>
@@ -177,6 +212,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 }
 
 const ICON_PX = 18
+const TOAST_MS = 3000
 
 function keyButton(k: (typeof KEYS)[number]) {
 	const Icon = k.icon

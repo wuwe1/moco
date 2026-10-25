@@ -20,8 +20,13 @@ const IMAGE = 4
 const PLACEMENTS = 5
 const FORGET = 6
 const LOG = 7
+const UPLOAD = 8
 
-type ServerMsg = { type: 'challenge'; nonce: string; name: string } | { type: 'ready'; name: string } | { type: 'exit'; code: number }
+type ServerMsg =
+	| { type: 'challenge'; nonce: string; name: string }
+	| { type: 'ready'; name: string }
+	| { type: 'exit'; code: number }
+	| { type: 'uploaded'; id: number; path?: string; error?: string }
 
 const parseFrame = (buf: Uint8Array) => {
 	const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
@@ -54,6 +59,8 @@ export class Conn {
 	private unlog = () => {}
 	onFrameDrawn = () => {}
 	private resizedAt = 0
+	private uploadSeq = 0
+	private uploads = new Map<number, { resolve: (path: string) => void; reject: (e: Error) => void }>()
 
 	constructor(
 		private host: Host,
@@ -130,6 +137,11 @@ export class Conn {
 			if (msg.type === 'challenge') {
 				if (msg.name !== this.host.name) return ws.close(4000, 'host mismatch')
 				ws.send(JSON.stringify({ type: 'auth', sig: await signChallenge(msg.name, msg.nonce) }))
+			} else if (msg.type === 'uploaded') {
+				const u = this.uploads.get(msg.id)
+				this.uploads.delete(msg.id)
+				if (msg.path) u?.resolve(msg.path)
+				else u?.reject(new Error(msg.error ?? '没有路径'))
 			} else if (msg.type === 'ready') {
 				this.tries = 0
 				this.retries = 0
@@ -147,6 +159,8 @@ export class Conn {
 			dlog(`WebSocket 关闭 code=${e.code} reason=${e.reason || '无'} clean=${e.wasClean}${this.ws !== ws ? '（旧连接，忽略）' : ''}`)
 			if (this.ws !== ws) return
 			this.unlog()
+			this.uploads.forEach(u => u.reject(new Error('连接断了')))
+			this.uploads.clear()
 			this.lastClose = e.reason ? `${e.code} ${e.reason}` : String(e.code)
 			this.retries++
 			if (e.code === UNAUTHORIZED) return this.set('unauthorized')
@@ -211,6 +225,17 @@ export class Conn {
 
 	send(data: string) {
 		if (this.state === 'open') this.ws?.send(frame(INPUT, data))
+	}
+
+	upload(data: Uint8Array): Promise<string> {
+		if (this.state !== 'open' || !this.ws) return Promise.reject(new Error('还没连上'))
+		const id = ++this.uploadSeq
+		const out = new Uint8Array(5 + data.length)
+		out[0] = UPLOAD
+		new DataView(out.buffer).setUint32(1, id)
+		out.set(data, 5)
+		this.ws.send(out)
+		return new Promise((resolve, reject) => this.uploads.set(id, { resolve, reject }))
 	}
 
 	resize(cols: number, rows: number) {
