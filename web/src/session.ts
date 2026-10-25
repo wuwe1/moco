@@ -8,6 +8,7 @@ import { Conn, type State } from './conn'
 import { theme } from './theme'
 import { dlog } from './debug'
 import { gestures } from './gestures'
+import { ImageLayer } from './images'
 import { fontSize, saveScreen, setFontSize, type Host } from './store'
 
 
@@ -41,6 +42,7 @@ export class Session {
 	readonly el = document.createElement('div')
 	readonly term: Terminal
 	readonly conn: Conn
+	readonly images: ImageLayer
 	private fit = new FitAddon()
 	private serializer = new SerializeAddon()
 	private opened = false
@@ -64,10 +66,16 @@ export class Session {
 		this.term.unicode.activeVersion = '15-graphemes'
 		this.term.loadAddon(this.fit)
 		this.term.loadAddon(this.serializer)
-		this.conn = new Conn(host, this.term, state => {
-			this.el.classList.toggle('offline', state !== 'open')
-			changed()
-		})
+		this.images = new ImageLayer(this.term)
+		this.conn = new Conn(
+			host,
+			this.term,
+			state => {
+				this.el.classList.toggle('offline', state !== 'open')
+				changed()
+			},
+			this.images,
+		)
 		this.term.onData(d => this.conn.send(d))
 		this.term.onResize(({ cols, rows }) => this.conn.resize(cols, rows))
 	}
@@ -80,6 +88,7 @@ export class Session {
 		if (!this.opened) {
 			this.opened = true
 			this.term.open(this.el)
+			this.images.mount()
 			gestures(this.el, this.term, { onTap: () => this.onTap(), onFont: setFont })
 		}
 		this.fitNow()
@@ -93,7 +102,10 @@ export class Session {
 	}
 
 	fitNow() {
-		if (this.opened && !this.el.hidden) this.fit.fit()
+		if (this.opened && !this.el.hidden) {
+			this.fit.fit()
+			this.images.draw()
+		}
 	}
 
 	snapshot() {

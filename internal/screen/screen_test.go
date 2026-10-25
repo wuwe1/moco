@@ -50,11 +50,14 @@ func (w *buf) String() string {
 
 func frame(t *testing.T, s *Screen) []byte {
 	t.Helper()
-	f, _, _, wait := s.Frame()
+	f, wait := s.Frame()
 	if wait > 0 {
 		t.Fatalf("unexpected wait %v", wait)
 	}
-	return f
+	if f == nil {
+		return nil
+	}
+	return f.Data
 }
 
 // 帧喂给手机后，手机上的画面和电脑上的一格不差（字、宽度、样式），光标也在同一处
@@ -105,8 +108,8 @@ func TestWaitsForSynchronizedUpdate(t *testing.T) {
 	s := New(20, 6, Theme{}, io.Discard)
 	defer s.Close()
 	s.Write([]byte("\x1b[?2026hhalf"))
-	if f, _, _, wait := s.Frame(); f != nil || wait <= 0 {
-		t.Fatalf("mid-update: frame %q wait %v", f, wait)
+	if f, wait := s.Frame(); f != nil || wait <= 0 {
+		t.Fatalf("mid-update: frame %+v wait %v", f, wait)
 	}
 	s.Write([]byte(" done\x1b[?2026l"))
 	if f := frame(t, s); !strings.Contains(string(f), "half done") {
@@ -114,8 +117,8 @@ func TestWaitsForSynchronizedUpdate(t *testing.T) {
 	}
 	s.Write([]byte("\x1b[?2026hstuck"))
 	time.Sleep(SyncTimeout + 20*time.Millisecond)
-	if f, _, _, _ := s.Frame(); !strings.Contains(string(f), "stuck") {
-		t.Fatalf("after timeout: %q", f)
+	if f, _ := s.Frame(); f == nil || !strings.Contains(string(f.Data), "stuck") {
+		t.Fatalf("after timeout: %+v", f)
 	}
 }
 
@@ -167,13 +170,13 @@ func TestResizeRepaintsAll(t *testing.T) {
 	s.Write([]byte("a\r\nb\r\nc\r\nd"))
 	frame(t, s)
 	s.Resize(10, 3)
-	f, cols, rows, _ := s.Frame()
-	if cols != 10 || rows != 3 {
-		t.Fatalf("size %dx%d", cols, rows)
+	f, _ := s.Frame()
+	if f.Cols != 10 || f.Rows != 3 {
+		t.Fatalf("size %dx%d", f.Cols, f.Rows)
 	}
 	for y := 1; y <= 3; y++ {
-		if !strings.Contains(string(f), fmt.Sprintf("\x1b[%d;1H", y)) {
-			t.Errorf("row %d not repainted: %q", y, f)
+		if !strings.Contains(string(f.Data), fmt.Sprintf("\x1b[%d;1H", y)) {
+			t.Errorf("row %d not repainted: %q", y, f.Data)
 		}
 	}
 }

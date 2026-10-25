@@ -262,11 +262,24 @@ func syncFrames(args []string) error {
 	enc.Encode(record{R: []int{cols, rows}})
 	var cps []checkpoint
 	emit := func() {
-		f, _, _, _ := scr.Frame()
+		f, _ := scr.Frame()
 		if f == nil {
 			return
 		}
-		enc.Encode(record{D: f})
+		// 图片事件打到 stderr，看 herdr 的图有没有被正确接住
+		for _, id := range f.Forget {
+			fmt.Fprintf(os.Stderr, "frame %d: forget image %d\n", n+1, id)
+		}
+		for _, img := range f.Images {
+			fmt.Fprintf(os.Stderr, "frame %d: image %d %dx%d, png %d bytes\n", n+1, img.ID, img.W, img.H, len(img.PNG))
+		}
+		if f.Placements != nil {
+			fmt.Fprintf(os.Stderr, "frame %d: placements %+v\n", n+1, f.Placements)
+		}
+		if f.Data == nil {
+			return
+		}
+		enc.Encode(record{D: f.Data})
 		n++
 		cp := snapshot(ref, n, modes)
 		cps = append(cps, cp)

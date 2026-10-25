@@ -280,6 +280,8 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 }
 .pane.offline { opacity: .5; }
 .pane .xterm { height: 100%; }
+/* 图片层（images.ts）：盖在文字上面，不挡触摸 */
+.pane .images { position: absolute; z-index: 9; pointer-events: none; }
 /* 行数取整后底下剩几个像素：xterm 自带的视口是黑底，换成终端底色 */
 .pane .xterm-viewport { overflow-y: hidden !important; background: var(--term) !important; }
 

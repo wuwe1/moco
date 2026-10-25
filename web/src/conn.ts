@@ -3,6 +3,7 @@
 // 断了自己重连；mocod 用 4401 关连接说明这台手机没登记或签名不对，这时不再重连，等重新配对
 import type { Terminal } from '@xterm/xterm'
 import { dlog } from './debug'
+import type { ImageLayer, Placement } from './images'
 import { deviceKey, signChallenge } from './keys'
 import type { Host } from './store'
 import { wireTheme } from './theme'
@@ -16,6 +17,9 @@ const UNAUTHORIZED = 4401
 const enc = new TextEncoder()
 const FRAME = 2
 const ACK = 3
+const IMAGE = 4
+const PLACEMENTS = 5
+const FORGET = 6
 
 const frame = (type: number, body: string) => {
 	const b = enc.encode(body)
@@ -39,11 +43,14 @@ export class Conn {
 	// 上一次断开的关闭码和原因，显示在抽屉的标题栏上，排查用
 	lastClose = ''
 	retries = 0
+	// 下一帧画完时生效的放置（图片和那一帧的文字同时出现）
+	private pendingPlacements?: Placement[]
 
 	constructor(
 		private host: Host,
 		private term: Terminal,
 		private onState: (s: State) => void,
+		private images: ImageLayer,
 	) {
 		document.addEventListener('visibilitychange', () => {
 			if (document.hidden) this.hiddenAt = Date.now()
@@ -80,7 +87,7 @@ export class Conn {
 			dlog(`WebSocket 打开，协议 ${ws.protocol || '无'}`)
 			try {
 				const { pub } = await deviceKey()
-				ws.send(JSON.stringify({ type: 'hello', key: pub, cols: this.term.cols, rows: this.term.rows, theme: wireTheme }))
+				ws.send(JSON.stringify({ type: 'hello', key: pub, cols: this.term.cols, rows: this.term.rows, theme: wireTheme, cell: this.images.cellSize() }))
 			} catch (e) {
 				dlog(`取设备密钥失败：${e}`)
 			}
@@ -91,6 +98,12 @@ export class Conn {
 				const buf = new Uint8Array(e.data as ArrayBuffer)
 				if (buf[0] === 0) this.term.write(this.decoder.decode(buf.subarray(1), { stream: true }))
 				else if (buf[0] === FRAME) this.frame(ws, buf)
+				else if (buf[0] === IMAGE) this.images.add(new DataView(buf.buffer).getUint32(1), buf.slice(9))
+				else if (buf[0] === PLACEMENTS) this.pendingPlacements = JSON.parse(this.frameDecoder.decode(buf.subarray(1)))
+				else if (buf[0] === FORGET) {
+					const view = new DataView(buf.buffer)
+					for (let i = 1; i + 4 <= buf.length; i += 4) this.images.forget(view.getUint32(i))
+				}
 				return
 			}
 			const msg = JSON.parse(e.data)
@@ -104,6 +117,8 @@ export class Conn {
 				this.retries = 0
 				this.term.reset()
 				this.decoder = new TextDecoder()
+				this.images.reset()
+				this.pendingPlacements = undefined
 				this.set('open')
 				// 握手期间屏幕可能已经变过大小
 				this.resize(this.term.cols, this.term.rows)
@@ -134,6 +149,10 @@ export class Conn {
 		const cols = view.getUint16(5)
 		const rows = view.getUint16(7)
 		const ack = () => {
+			if (this.pendingPlacements) {
+				this.images.set(this.pendingPlacements)
+				this.pendingPlacements = undefined
+			}
 			const out = new Uint8Array(5)
 			out[0] = ACK
 			new DataView(out.buffer).setUint32(1, seq)
@@ -170,6 +189,7 @@ export class Conn {
 	}
 
 	resize(cols: number, rows: number) {
-		if (this.state === 'open') this.ws?.send(frame(1, JSON.stringify({ cols, rows })))
+		// 带上一格的大小：改字号时它也变了，mocod 用它回答程序的 CSI 16 t
+		if (this.state === 'open') this.ws?.send(frame(1, JSON.stringify({ cols, rows, cell: this.images.cellSize() })))
 	}
 }

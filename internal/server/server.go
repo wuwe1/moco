@@ -155,6 +155,12 @@ type message struct {
 	Code  *int   `json:"code,omitempty"`
 
 	Theme screen.Theme `json:"theme,omitzero"`
+	Cell  *cellSize    `json:"cell,omitempty"` // v2：手机上一格多少 CSS 像素，回答 CSI 16 t 用
+}
+
+type cellSize struct {
+	W int `json:"w"`
+	H int `json:"h"`
 }
 
 func (s *Server) ws(w http.ResponseWriter, r *http.Request) {

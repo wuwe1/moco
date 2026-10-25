@@ -61,11 +61,25 @@ type Screen struct {
 	sentHidden         bool
 	sentStyle          string
 	sentAny            bool
+	sentImages         map[uint32]bool
+
+	k *kitty // 图片（kitty 图形协议）
+
+	cellW, cellH int // 手机上一格多少 CSS 像素；0 表示不知道
+}
+
+// Frame 是一帧：文字部分是控制序列，图片单独带（手机上的 xterm.js 不认 kitty 协议）
+type Frame struct {
+	Data       []byte // 控制序列；只有图变了时为空
+	Cols, Rows int
+	Forget     []uint32    // 手机该丢掉的图（删了，或同一个编号换了内容）
+	Images     []*Image    // 放置里用到、手机还没有的图
+	Placements []Placement // 现在所有的放置，从下往上；nil 表示没变
 }
 
 // New 建一块屏幕；模拟器对查询的回答（光标位置、颜色等）写进 respond，也就是程序的输入
 func New(cols, rows int, theme Theme, respond io.Writer) *Screen {
-	s := &Screen{e: vt.NewEmulator(cols, rows), modes: map[int]bool{}, sentModes: map[int]bool{}}
+	s := &Screen{e: vt.NewEmulator(cols, rows), modes: map[int]bool{}, sentModes: map[int]bool{}, sentImages: map[uint32]bool{}, k: newKitty()}
 	s.e.SetScrollbackSize(0)
 	s.setTheme(theme)
 	s.e.SetCallbacks(vt.Callbacks{
@@ -73,6 +87,8 @@ func New(cols, rows int, theme Theme, respond io.Writer) *Screen {
 		DisableMode: func(m ansi.Mode) { s.mode(m, false) },
 	})
 	s.e.RegisterOscHandler(4, s.oscPalette)
+	s.e.RegisterApcHandler(func(data []byte) bool { return s.k.handle(data, s.e.CursorPosition()) })
+	s.e.RegisterCsiHandler('t', s.windowOps)
 	go io.Copy(respond, s.e)
 	return s
 }
@@ -124,6 +140,30 @@ func (s *Screen) mode(m ansi.Mode, on bool) {
 	s.modes[n] = on
 }
 
+// SetCellSize 记下手机上一格的大小（CSS 像素）：程序问 CSI 16 t 时照这个回答，
+// herdr 用它把图片的像素尺寸换算成占几列几行，答错了图会被拉扁
+func (s *Screen) SetCellSize(w, h int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cellW, s.cellH = w, h
+}
+
+// CSI 16 t 问一格多少像素，CSI 14 t 问整个文字区多少像素（XTWINOPS）。不知道就不答，和以前一样
+func (s *Screen) windowOps(params ansi.Params) bool {
+	if s.cellW <= 0 || s.cellH <= 0 {
+		return false
+	}
+	switch n, _, _ := params.Param(0, 0); n {
+	case 16:
+		fmt.Fprintf(s.e.InputPipe(), "\x1b[6;%d;%dt", s.cellH, s.cellW)
+	case 14:
+		fmt.Fprintf(s.e.InputPipe(), "\x1b[4;%d;%dt", s.cellH*s.e.Height(), s.cellW*s.e.Width())
+	default:
+		return false
+	}
+	return true
+}
+
 // Close 关掉回答的管道，转发回答的协程随之退出。
 // 不调 Emulator.Close：它和 Read 读写同一个标志、没加锁（-race 会报）
 func (s *Screen) Close() error {
@@ -158,19 +198,20 @@ func (s *Screen) Size() (int, int) {
 
 // Frame 出一帧：从上一帧到现在的变化。nil 表示没有可发的；
 // 这时 wait > 0 说明程序正画到一半，过 wait 再来问
-func (s *Screen) Frame() (frame []byte, cols, rows int, wait time.Duration) {
+func (s *Screen) Frame() (*Frame, time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	cols, rows = s.e.Width(), s.e.Height()
+	cols, rows := s.e.Width(), s.e.Height()
 	if !s.dirty {
-		return nil, cols, rows, 0
+		return nil, 0
 	}
 	if !s.syncSince.IsZero() {
 		if left := SyncTimeout - time.Since(s.syncSince); left > 0 {
-			return nil, cols, rows, left
+			return nil, left
 		}
 	}
 	s.dirty = false
+	f := &Frame{Cols: cols, Rows: rows}
 
 	var b bytes.Buffer
 	b.WriteString("\x1b[?2026h") // 手机上也整帧一起显示
@@ -212,11 +253,34 @@ func (s *Screen) Frame() (frame []byte, cols, rows int, wait time.Duration) {
 		changed = true
 	}
 	s.sentCursor, s.sentHidden, s.sentStyle, s.sentAny = pos, hidden, style, true
-	if !changed {
-		return nil, cols, rows, 0
+	if changed {
+		b.WriteString("\x1b[?2026l")
+		f.Data = b.Bytes()
 	}
-	b.WriteString("\x1b[?2026l")
-	return b.Bytes(), cols, rows, 0
+
+	// 图：先让手机丢掉过时的，再补上缺的，最后是放置
+	for _, id := range s.k.forgotten {
+		if s.sentImages[id] {
+			f.Forget = append(f.Forget, id)
+			delete(s.sentImages, id)
+		}
+	}
+	s.k.forgotten = nil
+	if s.k.changed || full {
+		s.k.changed = false
+		f.Placements = s.k.list()
+		for _, pl := range f.Placements {
+			if !s.sentImages[pl.Image] {
+				f.Images = append(f.Images, s.k.images[pl.Image])
+				s.sentImages[pl.Image] = true
+			}
+		}
+	}
+
+	if f.Data == nil && f.Placements == nil && f.Forget == nil {
+		return nil, 0
+	}
+	return f, 0
 }
 
 // Reset 让下一帧整屏重发（手机重连、刚打开时）
@@ -225,6 +289,7 @@ func (s *Screen) Reset() {
 	defer s.mu.Unlock()
 	s.sentAny = false
 	s.sentModes = map[int]bool{}
+	s.sentImages = map[uint32]bool{}
 	s.dirty = true
 }
 
