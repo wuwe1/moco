@@ -328,7 +328,7 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 	scrollbar-width: none;
 }
 #keys::-webkit-scrollbar { display: none; }
-#kbd { font-size: 17px; }
+#bar button { display: inline-flex; align-items: center; justify-content: center; }
 
 /* 真正接收键盘的输入框：看不见，但能拿到焦点、能跑输入法；16px 防止 iOS 聚焦时放大 */
 #input {

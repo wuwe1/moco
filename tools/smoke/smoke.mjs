@@ -51,10 +51,25 @@ const until = async (fn, what, ms = 5000) => {
 	throw new Error(`等不到：${what}\n屏幕：${await screenText()}`)
 }
 const count = (s, sub) => s.split(sub).length - 1
-const key = async k => {
-	const b = page.locator(`#keys [data-key="${k}"]`)
-	await b.dispatchEvent('pointerdown')
-	await b.dispatchEvent('pointerup')
+const keyButton = k => page.locator(`#bar [data-key="${k}"]`)
+const key = k => keyButton(k).tap()
+let cdp
+// 一根手指：在 from 按下，按住 holdMs，沿 moves（相对 from 的位移）挪过去，再松开
+const touch = async (from, { holdMs = 0, moves = [] } = {}) => {
+	cdp ??= await ctx.newCDPSession(page)
+	const send = (type, p) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: p ? [p] : [] })
+	await send('touchStart', from)
+	await sleep(holdMs)
+	for (const [dx, dy] of moves) {
+		await send('touchMove', { x: from.x + dx, y: from.y + dy })
+		await sleep(16)
+	}
+	await send('touchEnd')
+}
+const center = async loc => {
+	await loc.scrollIntoViewIfNeeded()
+	const b = await loc.boundingBox()
+	return { x: b.x + b.width / 2, y: b.y + b.height / 2 }
 }
 const redPixel = () => page.evaluate(() => {
 	const c = document.querySelector('.pane:not([hidden]) canvas.images')
@@ -91,7 +106,7 @@ try {
 	})
 	await check('打字、回车', async () => {
 		await until(async () => (await screenText()).includes('$'), '提示符')
-		await page.locator('#kbd').dispatchEvent('pointerdown')
+		await page.locator('#kbd').tap()
 		await page.keyboard.type('echo hi$((1+2))')
 		await page.keyboard.press('Enter')
 		await until(async () => count(await screenText(), 'hi3') === 1, 'hi3')
@@ -106,7 +121,7 @@ try {
 		await key('enter')
 		await sleep(200)
 		await key('ctrl')
-		if ((await page.locator('#keys [data-key="ctrl"]').getAttribute('aria-pressed')) !== 'true') throw new Error('Ctrl 没亮')
+		if ((await keyButton('ctrl').getAttribute('aria-pressed')) !== 'true') throw new Error('Ctrl 没亮')
 		await page.keyboard.type('c')
 		await page.keyboard.type('echo after$((2*3))')
 		await page.keyboard.press('Enter')
@@ -123,7 +138,7 @@ try {
 	})
 	await check('粘贴键', async () => {
 		await page.evaluate(() => navigator.clipboard.writeText('echo pasted$((4*4))'))
-		await page.locator('#keys [data-key="paste"]').click()
+		await keyButton('paste').tap()
 		await until(async () => (await screenText()).includes('echo pasted'), '粘贴进命令行')
 		await key('enter')
 		await until(async () => (await screenText()).includes('pasted16'), 'pasted16')
@@ -135,15 +150,29 @@ try {
 	})
 	await check('按住 ← 连发', async () => {
 		await page.keyboard.type('echo abcdefghijklmnop')
-		const b = page.locator('#keys [data-key="left"]')
-		await b.dispatchEvent('pointerdown')
-		await sleep(700)
-		await b.dispatchEvent('pointerup')
+		await touch(await center(keyButton('left')), { holdMs: 700 })
 		await page.keyboard.type('X')
 		await page.keyboard.press('Enter')
 		await until(async () => /[a-p]+X[a-p]+/.test(await screenText()), '输出里有 X')
 		const out = (await screenText()).match(/\s([a-p]+X[a-p]+)/)[1]
 		if (out.length - out.indexOf('X') - 1 < 3) throw new Error(`只往左挪了 ${out.length - out.indexOf('X') - 1} 格：${out}`)
+	})
+	await check('按下滑走再松手：不发', async () => {
+		await page.keyboard.type('echo slid$((5*5))')
+		await touch(await center(keyButton('enter')), { moves: [[0, -20], [0, -50], [0, -80]] })
+		await sleep(300)
+		if ((await screenText()).includes('slid25')) throw new Error('滑走了还是发了回车')
+		await page.keyboard.press('Enter')
+		await until(async () => (await screenText()).includes('slid25'), 'slid25')
+	})
+	await check('按在键上横着划按键栏：不发', async () => {
+		await page.keyboard.type('echo ab')
+		await touch(await center(keyButton('left')), { moves: [[-20, 0], [-50, 0], [-90, 0], [-130, 0]] })
+		await sleep(300)
+		await page.keyboard.type('Z')
+		await page.keyboard.press('Enter')
+		await until(async () => { const t = await screenText(); return count(t, 'abZ') + count(t, 'aZb') >= 2 }, '输出')
+		if (count(await screenText(), 'aZb')) throw new Error('划动时发了方向键')
 	})
 	await check('kitty 图：画在 canvas 上', async () => {
 		const red = Buffer.from(Array(16).fill([255, 0, 0]).flat()).toString('base64')
@@ -153,7 +182,7 @@ try {
 		await until(() => redPixel().then(Boolean), 'canvas 上的红色')
 	})
 	await check('轻点图：出大图，关掉', async () => {
-		await page.locator('#kbd').dispatchEvent('pointerdown')
+		await page.locator('#kbd').tap()
 		const at = await redPixel()
 		await page.touchscreen.tap(at.x, at.y)
 		await until(() => page.locator('.lightbox').count(), '大图')

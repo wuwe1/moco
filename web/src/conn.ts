@@ -171,7 +171,10 @@ export class Conn {
 			if (this.ws === ws && ws.readyState === WebSocket.OPEN) ws.send(out)
 		}
 		const drawnForOldSize = cols !== this.term.cols || rows !== this.term.rows
-		if (drawnForOldSize) return ack()
+		if (drawnForOldSize) {
+			dlog(`丢掉 ${cols}×${rows} 的一帧（现在 ${this.term.cols}×${this.term.rows}）`)
+			return ack()
+		}
 		this.term.write(this.frameDecoder.decode(body), ack)
 	}
 

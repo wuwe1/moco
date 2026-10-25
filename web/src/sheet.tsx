@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type { Conn, State } from './conn'
-import { debugLines, onDebug } from './debug'
+import { debugLines, dlog, onDebug } from './debug'
+import { Keyboard, KeyboardOff } from 'lucide-preact'
 import { KEYS, keyboard } from './keyboard'
 import { Lightbox, type Picture } from './lightbox'
 import { connOf, getOrCreateSession, useRerenderOnSessionChange, type Session } from './session'
@@ -35,6 +36,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	const [debug, setDebug] = useState(false)
 	const [picture, setPicture] = useState<Picture>()
 	const [pasting, setPasting] = useState(false)
+	const [typing, setTyping] = useState(false)
 	const [, bump] = useState(0)
 	useEffect(() => (debug ? onDebug(() => bump(n => n + 1)) : undefined), [debug])
 	useRerenderOnSessionChange()
@@ -64,9 +66,12 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	// 键盘弹出时界面只剩 visualViewport 那么高：抽屉缩到键盘上方，终端重算行列
 	useEffect(() => {
 		const vv = window.visualViewport
+		let lastH = 0
 		const layout = () => {
 			const el = root.current!
 			const h = vv ? vv.height : window.innerHeight
+			if (h !== lastH) dlog(`可视高度 ${lastH} → ${h}，offsetTop ${vv?.offsetTop ?? 0}，innerHeight ${window.innerHeight}`)
+			lastH = h
 			el.style.height = `${h}px`
 			el.style.setProperty('--vv-top', `${vv ? vv.offsetTop : 0}px`)
 			const keyboardOpen = h < window.innerHeight - KEYBOARD_MIN_PX
@@ -143,18 +148,35 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 			)}
 			<div id="compose" hidden />
 			<div id="bar">
-				<div id="keys">
-					{KEYS.map(k => (
-						<button key={k.id} data-key={k.id} aria-pressed={k.kind === 'ctrl' ? 'false' : undefined}>
-							{k.label}
-						</button>
-					))}
-				</div>
-				<button id="kbd" aria-label="键盘">⌨</button>
-				<textarea id="input" rows={1} autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck={false} />
+				<div id="keys">{KEYS.filter(k => !k.pinned).map(keyButton)}</div>
+				{KEYS.filter(k => k.pinned).map(keyButton)}
+				<button id="kbd" aria-label={typing ? '收起键盘' : '弹出键盘'}>
+					{typing ? <KeyboardOff size={ICON_PX} /> : <Keyboard size={ICON_PX} />}
+				</button>
+				<textarea
+					id="input"
+					rows={1}
+					autocapitalize="off"
+					autocomplete="off"
+					autocorrect="off"
+					spellcheck={false}
+					onFocus={() => setTyping(true)}
+					onBlur={() => setTyping(false)}
+				/>
 			</div>
 			{picture && <Lightbox img={picture} onClose={() => setPicture(undefined)} />}
 		</div>
+	)
+}
+
+const ICON_PX = 18
+
+function keyButton(k: (typeof KEYS)[number]) {
+	const Icon = k.icon
+	return (
+		<button key={k.id} data-key={k.id} aria-label={k.label} aria-pressed={k.kind === 'ctrl' ? 'false' : undefined}>
+			{Icon ? <Icon size={ICON_PX} /> : k.label}
+		</button>
 	)
 }
 

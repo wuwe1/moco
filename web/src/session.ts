@@ -81,7 +81,10 @@ export class Session {
 			this.images,
 		)
 		this.term.onData(d => this.conn.send(d))
-		this.term.onResize(({ cols, rows }) => this.conn.resize(cols, rows))
+		this.term.onResize(({ cols, rows }) => {
+			dlog(`终端改成 ${cols}×${rows}`)
+			this.conn.resize(cols, rows)
+		})
 	}
 
 	attach(parent: HTMLElement) {
