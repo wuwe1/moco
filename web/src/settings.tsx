@@ -1,5 +1,5 @@
 import { Bold, Check, ChevronLeft, FileUp, KeyRound, Minus, Plus, Sparkles, TextCursor, Trash2, Type } from 'lucide-react'
-import { Fragment, useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup, ButtonGroupText } from '@/components/ui/button-group'
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
@@ -7,18 +7,20 @@ import { Item, ItemActions, ItemContent, ItemGroup, ItemMedia, ItemSeparator, It
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { FONTS, type FontKey } from './fonts'
+import { CJK_FONTS, fontChoices, fontKey, importFont, removeFont, type CjkFont, type FontChoice } from './fonts'
 import { fingerprint } from './keys'
-import { applyLookToAllSessions, setFontFamilyForAllSessions, setFontSizeForAllSessions } from './session'
+import { applyFontToAllSessions, applyLookToAllSessions, setFontSizeForAllSessions } from './session'
 import {
 	allThemes,
 	currentTheme,
+	cjkFont,
 	customThemes,
 	FONT_MAX,
 	FONT_MIN,
-	fontKey,
 	fontSize,
 	saveCustomThemes,
+	setCjkFont,
+	setFontKey,
 	setTermPrefs,
 	setThemeId,
 	termPrefs,
@@ -109,7 +111,11 @@ export function SettingsPage(props: { onBack: () => void }) {
 	const [themes, setThemes] = useState(allThemes)
 	const [importing, setImporting] = useState(false)
 	const [prefs, setPrefs] = useState(termPrefs)
-	const [font, setFont] = useState(fontKey)
+	const [font, setFont] = useState<string>(fontKey)
+	const [fonts, setFonts] = useState(fontChoices)
+	const [cjk, setCjk] = useState(cjkFont)
+	const [fontError, setFontError] = useState('')
+	const fontFile = useRef<HTMLInputElement>(null)
 	const [size, setSize] = useState(fontSize)
 	const [fp, setFp] = useState('')
 	useEffect(() => {
@@ -131,6 +137,31 @@ export function SettingsPage(props: { onBack: () => void }) {
 		setPrefs(next)
 		setTermPrefs(next)
 		applyLookToAllSessions()
+	}
+	const pickFont = (k: string) => {
+		setFont(k)
+		setFontKey(k)
+		applyFontToAllSessions()
+	}
+	const pickCjk = (k: CjkFont) => {
+		setCjk(k)
+		setCjkFont(k)
+		applyFontToAllSessions()
+	}
+	const addFont = async (file: File) => {
+		setFontError('')
+		try {
+			const f = await importFont(file)
+			setFonts(fontChoices())
+			pickFont(f.key)
+		} catch (e) {
+			setFontError(e instanceof Error ? e.message : String(e))
+		}
+	}
+	const dropFont = async (f: FontChoice) => {
+		await removeFont(f.custom!)
+		setFonts(fontChoices())
+		if (font === f.key) pickFont('system')
 	}
 	const resize = (n: number) => {
 		const next = Math.min(FONT_MAX, Math.max(FONT_MIN, n))
@@ -271,22 +302,66 @@ export function SettingsPage(props: { onBack: () => void }) {
 			</Section>
 
 			<Section title="字体">
-				{(Object.keys(FONTS) as FontKey[]).map(k => (
-					<Item key={k} size="sm" asChild>
-						<button
-							type="button"
-							data-font={k}
-							aria-pressed={font === k}
-							className="w-full text-left active:bg-accent"
-							onClick={() => {
-								setFont(k)
-								setFontFamilyForAllSessions(k)
-							}}
-						>
+				{fonts.map(f => (
+					<Item key={f.key} size="sm" asChild>
+						<button type="button" data-font={f.key} aria-pressed={font === f.key} className="w-full text-left active:bg-accent" onClick={() => pickFont(f.key)}>
 							<ItemContent>
-								<ItemTitle className="text-base font-normal">{FONTS[k].label}</ItemTitle>
+								<ItemTitle className="text-base font-normal">{f.label}</ItemTitle>
 							</ItemContent>
-							{font === k && <Check className="size-5 text-ok" />}
+							<ItemActions>
+								{font === f.key && <Check className="size-5 text-ok" />}
+								{f.custom && (
+									<Button
+										asChild
+										variant="ghost"
+										size="icon-sm"
+										aria-label={`删除 ${f.label}`}
+										onClick={e => {
+											e.stopPropagation()
+											dropFont(f)
+										}}
+									>
+										<span>
+											<Trash2 />
+										</span>
+									</Button>
+								)}
+							</ItemActions>
+						</button>
+					</Item>
+				))}
+				<Item size="sm" asChild>
+					<button type="button" className="w-full text-left active:bg-accent" onClick={() => fontFile.current?.click()}>
+						<ItemMedia>
+							<FileUp className="size-5 text-muted-foreground" />
+						</ItemMedia>
+						<ItemContent>
+							<ItemTitle className="text-base font-normal">导入字体…</ItemTitle>
+							{fontError && <p className="text-sm text-destructive">{fontError}</p>}
+						</ItemContent>
+					</button>
+				</Item>
+			</Section>
+			<input
+				ref={fontFile}
+				type="file"
+				accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+				hidden
+				onChange={e => {
+					const file = e.currentTarget.files?.[0]
+					e.currentTarget.value = ''
+					if (file) addFont(file)
+				}}
+			/>
+
+			<Section title="中文字体">
+				{(Object.keys(CJK_FONTS) as CjkFont[]).map(k => (
+					<Item key={k} size="sm" asChild>
+						<button type="button" data-cjk={k} aria-pressed={cjk === k} className="w-full text-left active:bg-accent" onClick={() => pickCjk(k)}>
+							<ItemContent>
+								<ItemTitle className="text-base font-normal">{CJK_FONTS[k]}</ItemTitle>
+							</ItemContent>
+							{cjk === k && <Check className="size-5 text-ok" />}
 						</button>
 					</Item>
 				))}

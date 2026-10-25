@@ -9,8 +9,8 @@ import { gestures } from './gestures'
 import { grid, locate } from './grid'
 import { renderThumbnail } from './thumbnail'
 import { ImageLayer } from './images'
-import { currentTheme, fontKey, fontSize, saveScreen, setFontKey, setFontSize, termPrefs, type Host } from './store'
-import { fontStack, loadFont, type FontKey } from './fonts'
+import { currentTheme, fontSize, saveScreen, setFontSize, termPrefs, type Host } from './store'
+import { currentFontStack, fontKey, loadFont } from './fonts'
 
 const sessions = new Map<string, Session>()
 const listeners = new Set<() => void>()
@@ -56,7 +56,7 @@ export class Session {
 	constructor(readonly host: Host) {
 		this.el.className = 'pane'
 		this.term = new Terminal({
-			fontFamily: fontStack(fontKey()),
+			fontFamily: currentFontStack(),
 			fontSize: fontSize(),
 			...lookOptions(),
 			// 不留本地回滚：滚动都交给 herdr；留了 fit 会在右边给滚动条让出 14px
@@ -216,11 +216,12 @@ export function setFontSizeForAllSessions(size: number) {
 	})
 }
 
-export async function setFontFamilyForAllSessions(k: FontKey) {
-	await loadFont(k)
-	setFontKey(k)
+// 字体设置（西文、中文）改了：等字体到了再换，xterm 按新字体重新量格子
+export async function applyFontToAllSessions() {
+	await loadFont(fontKey())
+	const stack = currentFontStack()
 	sessions.forEach(s => {
-		s.term.options.fontFamily = fontStack(k)
+		s.term.options.fontFamily = stack
 		s.fitNow()
 	})
 }

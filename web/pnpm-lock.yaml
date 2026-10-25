@@ -8,7 +8,13 @@ importers:
 
   .:
     dependencies:
+      '@fontsource/dejavu-mono':
+        specifier: 5.3.0
+        version: 5.3.0
       '@fontsource/fira-code':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/iosevka':
         specifier: 5.3.0
         version: 5.3.0
       '@fontsource/jetbrains-mono':
@@ -17,6 +23,9 @@ importers:
       '@fontsource/maple-mono':
         specifier: 5.3.0
         version: 5.3.0
+      '@fontsource/noto-sans-sc':
+        specifier: 5.3.1
+        version: 5.3.1
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
@@ -54,9 +63,6 @@ importers:
         specifier: 1.1.2
         version: 1.1.2(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
     devDependencies:
-      '@fontsource/iosevka':
-        specifier: 5.3.0
-        version: 5.3.0
       '@tailwindcss/vite':
         specifier: 4.3.3
         version: 4.3.3(vite@8.3.5(esbuild@0.28.2)(jiti@2.7.0))
@@ -252,6 +258,9 @@ packages:
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
 
+  '@fontsource/dejavu-mono@5.3.0':
+    resolution: {integrity: sha512-TiW6o/iRt7rnm3c3ezO3V7mNDI6h2IYca1j8Krke5qebUUW9dXF+BFzXFgbCMyXBVfmUbYPmhOInEqdy9ZgblA==}
+
   '@fontsource/fira-code@5.3.0':
     resolution: {integrity: sha512-EJL968RJRkakubAj/coU8pSUaeTE5UNoRjtzAr6kGiSZ3jWuN8/AKWHwym/PFUaQL1q7IL/H+EXs4358YhrTBQ==}
 
@@ -263,6 +272,9 @@ packages:
 
   '@fontsource/maple-mono@5.3.0':
     resolution: {integrity: sha512-8N3FVDWphO/971tZIig9D558j9jf09fWYIXFjgv7DKJEvDjtgfATx1ScWHdTCsf+tufFS5M1bAa4AumVBKPhSQ==}
+
+  '@fontsource/noto-sans-sc@5.3.1':
+    resolution: {integrity: sha512-YxZ/VWAWo9FWzH08Q6fGTzIW6vYNP2TMhUFCnfhlimbhdXnWrxJLrzX3KWt2FKnV0s8XiM5vjpGHQiyFRlTj0w==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -1805,6 +1817,8 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
+  '@fontsource/dejavu-mono@5.3.0': {}
+
   '@fontsource/fira-code@5.3.0': {}
 
   '@fontsource/iosevka@5.3.0': {}
@@ -1812,6 +1826,8 @@ snapshots:
   '@fontsource/jetbrains-mono@5.3.0': {}
 
   '@fontsource/maple-mono@5.3.0': {}
+
+  '@fontsource/noto-sans-sc@5.3.1': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:

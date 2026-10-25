@@ -1,8 +1,8 @@
 import '@xterm/xterm/css/xterm.css'
 import { createRoot } from 'react-dom/client'
 import { App } from './app'
-import { loadFont } from './fonts'
-import { currentTheme, fontKey } from './store'
+import { fontKey, loadFont } from './fonts'
+import { currentTheme } from './store'
 import { applyTheme } from './themes'
 import './index.css'
 

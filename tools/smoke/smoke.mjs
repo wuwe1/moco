@@ -118,6 +118,7 @@ const pair = async () => {
 	await until(async () => (await status()) === '已连接', '已连接')
 }
 const closeSheet = async () => {
+	await sleep(450) // 等抽屉滑上来的动画（.38s）走完再量把手的位置
 	const box = await page.locator('#grab').boundingBox()
 	await page.mouse.move(box.x + 50, box.y + 10)
 	await page.mouse.down()
@@ -387,6 +388,30 @@ try {
 		if ((await rows()) !== full) throw new Error('收起后行数变了')
 		const t = await page.evaluate(() => document.querySelector('.pane:not([hidden])').style.transform)
 		if (t) throw new Error('收起后还推着：' + t)
+	})
+	await check('字体：Iosevka、中文 Noto Sans SC、导入字体文件', async () => {
+		await closeSheet()
+		await page.click('#home [aria-label="设置"]')
+		await page.click('#settings [data-font="iosevka"]')
+		await page.click('#settings [data-cjk="noto"]')
+		await page.locator('#settings input[type="file"]').setInputFiles(join(repo, 'web/public/fonts/moco-symbols.woff2'))
+		await until(async () => (await page.locator('#settings [data-font^="custom:"][aria-pressed="true"]').count()) === 1, '导入的字体被选中')
+		await page.click('#settings [aria-label="返回"]')
+		await page.click('.host')
+		await until(async () => {
+			const font = await page.evaluate(() => {
+				const rows = document.querySelector('.pane:not([hidden]) .xterm-rows')
+				return rows ? getComputedStyle(rows).fontFamily : ''
+			})
+			return /moco-custom:.*moco-symbols.*Noto Sans SC/.test(font)
+		}, '终端用上导入的字体和 Noto Sans SC')
+		await closeSheet()
+		await page.click('#home [aria-label="设置"]')
+		await page.locator('#settings [aria-label="删除 moco-symbols"]').click()
+		await until(async () => (await page.locator('#settings [data-font="system"][aria-pressed="true"]').count()) === 1, '删掉后回到系统字体')
+		await page.click('#settings [aria-label="返回"]')
+		await page.click('.host')
+		await until(async () => (await status()) === '已连接', '已连接')
 	})
 	await check('删掉再配对：旧连接不再听 online', async () => {
 		await closeSheet()

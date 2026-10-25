@@ -1,4 +1,3 @@
-import { isFontKey, type FontKey } from './fonts'
 import { BUILTIN, type Theme } from './themes'
 
 export type Host = {
@@ -15,6 +14,8 @@ const HOSTS = 'moco.hosts'
 const FONT = 'moco.fontSize'
 const DEVICE = 'moco.deviceName'
 const FONT_FAMILY = 'moco.fontFamily'
+const CUSTOM_FONTS = 'moco.customFonts'
+const CJK_FONT = 'moco.cjkFont'
 const THEME = 'moco.theme'
 const CUSTOM_THEMES = 'moco.customThemes'
 const TERM_PREFS = 'moco.termPrefs'
@@ -57,11 +58,10 @@ export const FONT_MAX = 24
 export const fontSize = () => Number(localStorage.getItem(FONT)) || 13
 export const setFontSize = (n: number) => localStorage.setItem(FONT, String(n))
 
-export const fontKey = (): FontKey => {
-	const k = localStorage.getItem(FONT_FAMILY)
-	return isFontKey(k) ? k : 'system'
-}
-export const setFontKey = (k: FontKey) => localStorage.setItem(FONT_FAMILY, k)
+export const fontKeyRaw = () => localStorage.getItem(FONT_FAMILY)
+export const setFontKey = (k: string) => localStorage.setItem(FONT_FAMILY, k)
+export const cjkFont = (): 'system' | 'noto' => (localStorage.getItem(CJK_FONT) === 'noto' ? 'noto' : 'system')
+export const setCjkFont = (k: 'system' | 'noto') => localStorage.setItem(CJK_FONT, k)
 
 export const deviceName = () => localStorage.getItem(DEVICE) ?? 'iPhone'
 export const setDeviceName = (s: string) => localStorage.setItem(DEVICE, s)
@@ -96,3 +96,7 @@ export type TermPrefs = { cursorStyle: CursorStyle; cursorBlink: boolean; boldBr
 const DEFAULT_PREFS: TermPrefs = { cursorStyle: 'block', cursorBlink: false, boldBright: true }
 export const termPrefs = (): TermPrefs => ({ ...DEFAULT_PREFS, ...readJSON<Partial<TermPrefs>>(TERM_PREFS, {}) })
 export const setTermPrefs = (p: TermPrefs) => localStorage.setItem(TERM_PREFS, JSON.stringify(p))
+
+export type CustomFont = { id: string; name: string }
+export const customFontList = (): CustomFont[] => readJSON<CustomFont[]>(CUSTOM_FONTS, []).filter(f => f && typeof f.id === 'string' && typeof f.name === 'string')
+export const saveCustomFontList = (list: CustomFont[]) => localStorage.setItem(CUSTOM_FONTS, JSON.stringify(list))
