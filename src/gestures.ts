@@ -64,8 +64,12 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: () => v
 
 	const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
 
+	// 捕获阶段先拿到，并且不再往里传：xterm 自己的触摸滚动、聚焦都不要
+	const opt = { passive: false, capture: true }
+
 	el.addEventListener('touchstart', e => {
 		e.preventDefault()
+		e.stopPropagation()
 		cancelAnimationFrame(raf)
 		if (e.touches.length >= 2) {
 			mode = 'pinch'
@@ -79,10 +83,11 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: () => v
 		y = lastY = t.clientY
 		startT = lastT = e.timeStamp
 		acc = velocity = moved = 0
-	}, { passive: false })
+	}, opt)
 
 	el.addEventListener('touchmove', e => {
 		e.preventDefault()
+		e.stopPropagation()
 		if (mode === 'pinch' && e.touches.length >= 2) {
 			const size = Math.round(Math.min(FONT_MAX, Math.max(FONT_MIN, pinchFont * dist(e.touches) / pinchDist)))
 			if (size !== term.options.fontSize) opts.onFont(size)
@@ -97,17 +102,18 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: () => v
 		lastY = t.clientY
 		lastT = e.timeStamp
 		scrollBy(dy)
-	}, { passive: false })
+	}, opt)
 
 	el.addEventListener('touchend', e => {
 		e.preventDefault()
+		e.stopPropagation()
 		if (e.touches.length) return
 		if (mode === 'scroll') {
 			if (moved < 8 && e.timeStamp - startT < 300) opts.onTap()
 			else if (e.timeStamp - lastT < 80 && Math.abs(velocity) > 0.3) glide()
 		}
 		mode = 'none'
-	}, { passive: false })
+	}, opt)
 
-	el.addEventListener('touchcancel', () => { mode = 'none' })
+	el.addEventListener('touchcancel', () => { mode = 'none' }, opt)
 }

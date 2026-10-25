@@ -26,7 +26,8 @@ const term = new Terminal({
 	theme,
 	scrollback: 5000,
 	cursorBlink: false,
-	disableStdin: true, // 输入只走自己的输入框；终端对查询的应答（onData）照常转发
+	// 不能设 disableStdin：它会拦下 xterm 发往终端的一切，包括滚轮转成的序列和对查询的应答。
+	// 触屏上 xterm 自己的输入框拿不到焦点（手势里拦了 touch 的默认行为），输入照样只走我们的输入框
 })
 const fit = new FitAddon()
 term.loadAddon(fit)
