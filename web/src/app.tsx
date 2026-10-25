@@ -2,7 +2,20 @@ import { useEffect, useState } from 'preact/hooks'
 import { deviceKey, fingerprint } from './keys'
 import { connOf, dropSession, useRerenderOnSessionChange } from './session'
 import { Sheet } from './sheet'
-import { deviceName, dropScreen, loadHosts, loadScreen, normalizeUrl, saveHosts, setDeviceName, type Host } from './store'
+import {
+	deviceName,
+	dropScreen,
+	KEYBOARD_MODES,
+	keyboardMode,
+	loadHosts,
+	loadScreen,
+	normalizeUrl,
+	saveHosts,
+	setDeviceName,
+	setKeyboardMode,
+	type Host,
+	type KeyboardMode,
+} from './store'
 
 type Health = 'checking' | 'online' | 'offline'
 
@@ -122,8 +135,34 @@ function Home(props: { hosts: Host[]; hidden: boolean; onOpen: (h: Host) => void
 					)
 				})}
 			</ul>
-			{fp && <footer class="device">这台手机的密钥 {fp}</footer>}
+			<footer class="device">
+				<KeyboardModePicker />
+				{fp && <div>这台手机的密钥 {fp}</div>}
+			</footer>
 		</main>
+	)
+}
+
+function KeyboardModePicker() {
+	const [mode, setMode] = useState(keyboardMode)
+	return (
+		<label class="kbmode">
+			键盘弹出时
+			<select
+				value={mode}
+				onChange={e => {
+					const m = e.currentTarget.value as KeyboardMode
+					setKeyboardMode(m)
+					setMode(m)
+				}}
+			>
+				{Object.entries(KEYBOARD_MODES).map(([m, label]) => (
+					<option key={m} value={m}>
+						{label}
+					</option>
+				))}
+			</select>
+		</label>
 	)
 }
 

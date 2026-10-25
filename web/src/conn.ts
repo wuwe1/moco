@@ -52,6 +52,7 @@ export class Conn {
 	retries = 0
 	private placementsOnNextFrame?: Placement[]
 	private unlog = () => {}
+	onFrameDrawn = () => {}
 
 	constructor(
 		private host: Host,
@@ -175,7 +176,10 @@ export class Conn {
 			dlog(`丢掉 ${cols}×${rows} 的一帧（现在 ${this.term.cols}×${this.term.rows}）`)
 			return ack()
 		}
-		this.term.write(this.frameDecoder.decode(body), ack)
+		this.term.write(this.frameDecoder.decode(body), () => {
+			ack()
+			this.onFrameDrawn()
+		})
 	}
 
 	private wake(stale: boolean) {

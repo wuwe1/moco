@@ -30,6 +30,23 @@ const pairCode = () => execFileSync(bin, ['pair'], { env }).toString().match(/(\
 
 const browser = await chromium.launch({ channel: 'chrome' })
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, permissions: ['clipboard-read', 'clipboard-write'] })
+// 无头 Chrome 弹不出软键盘：换一个 visualViewport，__keyboard(px) 当作键盘占了底下 px 高
+await ctx.addInitScript(() => {
+	const vv = new EventTarget()
+	let kb = 0
+	Object.defineProperties(vv, {
+		height: { get: () => innerHeight - kb },
+		width: { get: () => innerWidth },
+		offsetTop: { get: () => 0 },
+		offsetLeft: { get: () => 0 },
+		scale: { get: () => 1 },
+	})
+	Object.defineProperty(window, 'visualViewport', { get: () => vv })
+	window.__keyboard = px => {
+		kb = px
+		vv.dispatchEvent(new Event('resize'))
+	}
+})
 const page = await ctx.newPage()
 const errors = []
 page.on('pageerror', e => errors.push(e.message))
@@ -82,6 +99,16 @@ const redPixel = () => page.evaluate(() => {
 			return { x: r.left + (px + 4) * r.width / c.width, y: r.top + (py + 4) * r.height / c.height }
 		}
 	}
+})
+const rows = () => page.evaluate(() => document.querySelector('.pane:not([hidden]) .xterm-rows').children.length)
+const keyboardUp = px => page.evaluate(px => window.__keyboard(px), px)
+const setMode = m => page.evaluate(m => localStorage.setItem('moco.keyboardMode', m), m)
+// 提示符那一行（最后一行有字的）在终端区域里看得见
+const cursorShown = () => page.evaluate(() => {
+	const lines = [...document.querySelector('.pane:not([hidden]) .xterm-rows').children]
+	const c = lines.findLast(r => r.textContent.trim())?.getBoundingClientRect()
+	const p = document.querySelector('#panes').getBoundingClientRect()
+	return !!c && c.top >= p.top - 1 && c.bottom <= p.bottom + 1
 })
 const status = () => page.locator('#grab .status').textContent()
 const pair = async () => {
@@ -225,6 +252,11 @@ try {
 		if (!html.includes('img-done')) throw new Error('缩略图里没有最后一屏')
 		await until(async () => (await page.locator('.host .dot').getAttribute('data-state')) === 'open', '首页圆点 open')
 	})
+	await check('首页的开关改键盘模式', async () => {
+		await page.selectOption('.kbmode select', 'pan')
+		const m = await page.evaluate(() => localStorage.getItem('moco.keyboardMode'))
+		if (m !== 'pan') throw new Error('存的是 ' + m)
+	})
 	await check('再打开还连着', async () => {
 		await page.click('.host')
 		await until(async () => (await status()) === '已连接', '已连接')
@@ -234,6 +266,47 @@ try {
 		await page.locator('#grab .status').click()
 		await until(() => page.locator('.debug').count(), '日志面板')
 		await page.locator('.debug').click()
+	})
+	await check('键盘弹出·改大小：行数变少，收起恢复', async () => {
+		await setMode('resize')
+		const full = await rows()
+		await keyboardUp(348)
+		await until(async () => (await rows()) < full, '行数变少')
+		await keyboardUp(0)
+		await until(async () => (await rows()) === full, '行数恢复')
+	})
+	await check('键盘弹出·等新画面：盖一张截图，新尺寸的帧一到就揭掉', async () => {
+		await setMode('swap')
+		const full = await rows()
+		for (const px of [348, 0]) {
+			const covered = await page.evaluate(px => (window.__keyboard(px), !!document.querySelector('.pane .frozen')), px)
+			if (!covered) throw new Error(`键盘 ${px}：改尺寸时没盖截图`)
+			const t0 = Date.now()
+			await until(() => page.evaluate(() => !document.querySelector('.pane .frozen')), '揭掉截图', 2000)
+			if (Date.now() - t0 > 600) throw new Error(`键盘 ${px}：等了 ${Date.now() - t0}ms 才揭掉，是兜底超时不是新帧`)
+		}
+		if ((await rows()) !== full) throw new Error('收起后行数没恢复')
+	})
+	await check('键盘弹出·不改大小：行数不变，光标露在上面', async () => {
+		await setMode('pan')
+		const full = await rows()
+		await page.focus('#input')
+		await page.keyboard.type('clear; seq 1 80')
+		await page.keyboard.press('Enter')
+		await until(async () => (await screenText()).includes('80'), 'seq 输出')
+		await keyboardUp(348)
+		await sleep(400)
+		if ((await rows()) !== full) throw new Error(`行数变了：${full} → ${await rows()}`)
+		if (!(await cursorShown())) throw new Error('光标被键盘挡住了')
+		await page.keyboard.type('clear')
+		await page.keyboard.press('Enter')
+		await sleep(400)
+		if (!(await cursorShown())) throw new Error('clear 之后光标在顶上，画面没跟回去')
+		await keyboardUp(0)
+		await sleep(400)
+		if ((await rows()) !== full) throw new Error('收起后行数变了')
+		const t = await page.evaluate(() => document.querySelector('.pane:not([hidden])').style.transform)
+		if (t) throw new Error('收起后还推着：' + t)
 	})
 	await check('删掉再配对：旧连接不再听 online', async () => {
 		await closeSheet()

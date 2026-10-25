@@ -5,7 +5,7 @@ import { Keyboard, KeyboardOff } from 'lucide-preact'
 import { KEYS, keyboard } from './keyboard'
 import { Lightbox, type Picture } from './lightbox'
 import { connOf, getOrCreateSession, useRerenderOnSessionChange, type Session } from './session'
-import type { Host } from './store'
+import { KEYBOARD_MODES, keyboardMode, type Host } from './store'
 
 const KEYBOARD_MIN_PX = 80
 const CLOSE_DRAG_PX = 120
@@ -70,13 +70,13 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		const layout = () => {
 			const el = root.current!
 			const h = vv ? vv.height : window.innerHeight
-			if (h !== lastH) dlog(`可视高度 ${lastH} → ${h}，offsetTop ${vv?.offsetTop ?? 0}，innerHeight ${window.innerHeight}`)
+			if (h !== lastH) dlog(`可视高度 ${lastH} → ${h}，offsetTop ${vv?.offsetTop ?? 0}，innerHeight ${window.innerHeight}，${KEYBOARD_MODES[keyboardMode()]}`)
 			lastH = h
 			el.style.height = `${h}px`
 			el.style.setProperty('--vv-top', `${vv ? vv.offsetTop : 0}px`)
 			const keyboardOpen = h < window.innerHeight - KEYBOARD_MIN_PX
 			el.style.setProperty('--safe-bottom', keyboardOpen ? '0px' : 'env(safe-area-inset-bottom)')
-			current.current?.fitNow()
+			current.current?.layout(keyboardOpen)
 		}
 		vv?.addEventListener('resize', layout)
 		vv?.addEventListener('scroll', layout)

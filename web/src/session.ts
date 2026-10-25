@@ -7,9 +7,11 @@ import { Conn } from './conn'
 import { theme } from './theme'
 import { dlog } from './debug'
 import { gestures } from './gestures'
-import { locate } from './grid'
+import { grid, locate } from './grid'
 import { ImageLayer } from './images'
-import { fontSize, saveScreen, setFontSize, type Host } from './store'
+import { fontSize, keyboardMode, saveScreen, setFontSize, type Host } from './store'
+
+const THAW_AFTER_MS = 800
 
 const sessions = new Map<string, Session>()
 const listeners = new Set<() => void>()
@@ -49,6 +51,9 @@ export class Session {
 	private fit = new FitAddon()
 	private serializer = new SerializeAddon()
 	private opened = false
+	private panned = false
+	private frozen?: HTMLElement
+	private thawTimer = 0
 	onPlainTap = () => {}
 	onImage = (_img: { png: Uint8Array<ArrayBuffer>; w: number; h: number }) => {}
 
@@ -80,6 +85,8 @@ export class Session {
 			},
 			this.images,
 		)
+		this.conn.onFrameDrawn = () => this.thaw()
+		this.term.onRender(() => this.follow())
 		this.term.onData(d => this.conn.send(d))
 		this.term.onResize(({ cols, rows }) => {
 			dlog(`终端改成 ${cols}×${rows}`)
@@ -138,11 +145,51 @@ export class Session {
 		this.el.hidden = true
 	}
 
-	fitNow() {
-		if (this.opened && !this.el.hidden) {
-			this.fit.fit()
-			this.images.draw()
-		}
+	layout(keyboardOpen: boolean) {
+		const mode = keyboardMode()
+		this.panned = keyboardOpen && mode === 'pan'
+		if (this.panned) return this.follow()
+		this.el.style.height = ''
+		this.el.style.transform = ''
+		this.fitNow(mode === 'swap')
+	}
+
+	fitNow(hideUntilNewFrame = false) {
+		if (!this.opened || this.el.hidden || this.panned) return
+		const before = `${this.term.cols}x${this.term.rows}`
+		if (hideUntilNewFrame) this.freeze()
+		this.fit.fit()
+		if (`${this.term.cols}x${this.term.rows}` === before) this.thaw()
+		this.images.draw()
+	}
+
+	private follow() {
+		const g = this.panned && grid(this.term)
+		if (!g) return
+		const full = g.screen.offsetTop + g.screen.offsetHeight
+		const visible = this.el.parentElement!.clientHeight
+		const cursorBottom = g.screen.offsetTop + (this.term.buffer.active.cursorY + 1) * g.ch
+		const y = Math.min(Math.max(0, cursorBottom - visible), Math.max(0, full - visible))
+		this.el.style.height = `${full}px`
+		this.el.style.transform = `translateY(${-y}px)`
+	}
+
+	private freeze() {
+		const screen = grid(this.term)?.screen
+		if (this.frozen || !screen) return
+		const shot = screen.cloneNode(true) as HTMLElement
+		shot.className = 'frozen'
+		shot.style.left = `${screen.offsetLeft}px`
+		shot.style.top = `${screen.offsetTop}px`
+		screen.parentElement!.appendChild(shot)
+		this.frozen = shot
+		this.thawTimer = window.setTimeout(() => this.thaw(), THAW_AFTER_MS)
+	}
+
+	private thaw() {
+		clearTimeout(this.thawTimer)
+		this.frozen?.remove()
+		this.frozen = undefined
 	}
 
 	snapshot() {
