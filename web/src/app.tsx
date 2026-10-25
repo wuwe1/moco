@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'preact/hooks'
 import { deviceKey, fingerprint } from './keys'
-import { connOf, dropSession, useRerenderOnSessionChange } from './session'
+import { FONTS, type FontKey } from './fonts'
+import { connOf, dropSession, setFontFamilyForAllSessions, useRerenderOnSessionChange } from './session'
 import { Sheet } from './sheet'
-import { deviceName, dropScreen, loadHosts, loadScreen, normalizeUrl, saveHosts, setDeviceName, type Host } from './store'
+import { deviceName, dropScreen, fontKey, loadHosts, loadScreen, normalizeUrl, saveHosts, setDeviceName, type Host } from './store'
 
 type Health = 'checking' | 'online' | 'offline'
 
@@ -122,8 +123,34 @@ function Home(props: { hosts: Host[]; hidden: boolean; onOpen: (h: Host) => void
 					)
 				})}
 			</ul>
-			{fp && <footer class="device">这台手机的密钥 {fp}</footer>}
+			<footer class="device">
+				<FontPicker />
+				{fp && <div>这台手机的密钥 {fp}</div>}
+			</footer>
 		</main>
+	)
+}
+
+function FontPicker() {
+	const [font, setFont] = useState(fontKey)
+	return (
+		<label class="picker">
+			终端字体
+			<select
+				value={font}
+				onChange={e => {
+					const k = e.currentTarget.value as FontKey
+					setFont(k)
+					setFontFamilyForAllSessions(k)
+				}}
+			>
+				{Object.entries(FONTS).map(([k, f]) => (
+					<option key={k} value={k}>
+						{f.label}
+					</option>
+				))}
+			</select>
+		</label>
 	)
 }
 

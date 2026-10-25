@@ -156,10 +156,22 @@ button.icon { font-size: 22px; font-weight: 300; }
 .meta .more { background: none; color: var(--muted); min-width: 36px; font-size: 18px; }
 
 .device {
+	display: grid;
+	gap: 10px;
+	justify-items: center;
 	padding: 8px 16px 16px;
 	color: var(--muted);
 	font: 11px var(--mono);
 	text-align: center;
+}
+.picker { display: flex; align-items: center; gap: 8px; font: 13px var(--sans); }
+.picker select {
+	font: 16px var(--sans);
+	color: var(--fg);
+	background: var(--key);
+	border: 0;
+	border-radius: 7px;
+	padding: 4px 8px;
 }
 
 #add form {

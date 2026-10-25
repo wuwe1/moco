@@ -1,3 +1,5 @@
+import { isFontKey, type FontKey } from './fonts'
+
 export type Host = {
 	id: string
 	name: string
@@ -11,6 +13,7 @@ export type Screen = { html: string; at: number }
 const HOSTS = 'moco.hosts'
 const FONT = 'moco.fontSize'
 const DEVICE = 'moco.deviceName'
+const FONT_FAMILY = 'moco.fontFamily'
 const screenKey = (id: string) => `moco.screen.${id}`
 
 export function loadHosts(): Host[] {
@@ -46,6 +49,12 @@ export function dropScreen(id: string) {
 
 export const fontSize = () => Number(localStorage.getItem(FONT)) || 13
 export const setFontSize = (n: number) => localStorage.setItem(FONT, String(n))
+
+export const fontKey = (): FontKey => {
+	const k = localStorage.getItem(FONT_FAMILY)
+	return isFontKey(k) ? k : 'system'
+}
+export const setFontKey = (k: FontKey) => localStorage.setItem(FONT_FAMILY, k)
 
 export const deviceName = () => localStorage.getItem(DEVICE) ?? 'iPhone'
 export const setDeviceName = (s: string) => localStorage.setItem(DEVICE, s)

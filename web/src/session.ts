@@ -9,7 +9,8 @@ import { dlog } from './debug'
 import { gestures } from './gestures'
 import { grid, locate } from './grid'
 import { ImageLayer } from './images'
-import { fontSize, saveScreen, setFontSize, type Host } from './store'
+import { fontKey, fontSize, saveScreen, setFontKey, setFontSize, type Host } from './store'
+import { fontStack, loadFont, type FontKey } from './fonts'
 
 const sessions = new Map<string, Session>()
 const listeners = new Set<() => void>()
@@ -56,7 +57,7 @@ export class Session {
 	constructor(readonly host: Host) {
 		this.el.className = 'pane'
 		this.term = new Terminal({
-			fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+			fontFamily: fontStack(fontKey()),
 			fontSize: fontSize(),
 			theme,
 			// 不留本地回滚：滚动都交给 herdr；留了 fit 会在右边给滚动条让出 14px
@@ -205,6 +206,15 @@ function setFontForAllSessions(size: number) {
 	setFontSize(size)
 	sessions.forEach(s => {
 		s.term.options.fontSize = size
+		s.fitNow()
+	})
+}
+
+export async function setFontFamilyForAllSessions(k: FontKey) {
+	await loadFont(k)
+	setFontKey(k)
+	sessions.forEach(s => {
+		s.term.options.fontFamily = fontStack(k)
 		s.fitNow()
 	})
 }

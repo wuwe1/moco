@@ -301,10 +301,22 @@ try {
 		if (!html.includes('img-done')) throw new Error('缩略图里没有最后一屏')
 		await until(async () => (await page.locator('.host .dot').getAttribute('data-state')) === 'open', '首页圆点 open')
 	})
+	await check('首页换字体', async () => {
+		await page.selectOption('.picker select', 'jetbrains')
+		await until(() => page.evaluate(() => localStorage.getItem('moco.fontFamily') === 'jetbrains'), '存下字体')
+	})
 	await check('再打开还连着', async () => {
 		await page.click('.host')
 		await until(async () => (await status()) === '已连接', '已连接')
 		await until(async () => (await screenText()).includes('img-done'), '画面还在')
+	})
+	await check('终端用上新字体', async () => {
+		const r = await page.evaluate(() => ({
+			font: getComputedStyle(document.querySelector('.pane:not([hidden]) .xterm-rows')).fontFamily,
+			faces: [...document.fonts].filter(f => /JetBrains|moco-symbols/.test(f.family)).map(f => f.status),
+		}))
+		if (!/^"?JetBrains Mono"?, moco-symbols/.test(r.font)) throw new Error('字体：' + r.font)
+		if (r.faces.length !== 3 || r.faces.some(s => s !== 'loaded')) throw new Error('没加载完：' + r.faces)
 	})
 	await check('点状态看日志', async () => {
 		await page.locator('#grab .status').click()
