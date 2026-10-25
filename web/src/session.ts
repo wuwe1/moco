@@ -2,6 +2,7 @@
 // 离开时把当前这一屏存成 HTML，首页的缩略图就是它
 import { FitAddon } from '@xterm/addon-fit'
 import { SerializeAddon } from '@xterm/addon-serialize'
+import { UnicodeGraphemesAddon } from '@xterm/addon-unicode-graphemes'
 import { Terminal } from '@xterm/xterm'
 import { Conn, type State } from './conn'
 import { dlog } from './debug'
@@ -59,7 +60,13 @@ export class Session {
 			// 不留本地回滚：滚动都交给 herdr；留了 fit 会在右边给滚动条让出 14px
 			scrollback: 0,
 			cursorBlink: false,
+			// 字宽插件还在 proposed API 里
+			allowProposedApi: true,
 		})
+		// 字宽按字素簇算（👨‍👩‍👧 算一个字、占两格），和 herdr 排版的算法一致；
+		// 默认的 Unicode 6 表会让带 emoji 的行错位（tools/vtcheck 里对过）
+		this.term.loadAddon(new UnicodeGraphemesAddon())
+		this.term.unicode.activeVersion = '15-graphemes'
 		this.term.loadAddon(this.fit)
 		this.term.loadAddon(this.serializer)
 		this.conn = new Conn(host, this.term, state => {

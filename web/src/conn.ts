@@ -28,6 +28,9 @@ export class Conn {
 	private timer?: number
 	private hiddenAt = 0
 	private stopped = false
+	// 自己按流解 UTF-8 再交给 xterm.js：一个字的字节可能被切在两帧里，
+	// xterm.js 6.0.0 遇到 3 字节的字切在第 2 字节后会把这个字丢掉（tools/vtcheck 里查到的）
+	private decoder = new TextDecoder()
 	state: State = 'closed'
 	// 上一次断开的关闭码和原因，显示在抽屉的标题栏上，排查用
 	lastClose = ''
@@ -81,7 +84,7 @@ export class Conn {
 		ws.onmessage = async e => {
 			if (typeof e.data !== 'string') {
 				const buf = new Uint8Array(e.data as ArrayBuffer)
-				if (buf[0] === 0) this.term.write(buf.subarray(1))
+				if (buf[0] === 0) this.term.write(this.decoder.decode(buf.subarray(1), { stream: true }))
 				return
 			}
 			const msg = JSON.parse(e.data)
@@ -94,6 +97,7 @@ export class Conn {
 				this.tries = 0
 				this.retries = 0
 				this.term.reset()
+				this.decoder = new TextDecoder()
 				this.set('open')
 				// 握手期间屏幕可能已经变过大小
 				this.resize(this.term.cols, this.term.rows)
