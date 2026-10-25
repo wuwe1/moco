@@ -26,6 +26,9 @@ export class Conn {
 	private hiddenAt = 0
 	private stopped = false
 	state: State = 'closed'
+	// 上一次断开的关闭码和原因，显示在抽屉的标题栏上，排查用
+	lastClose = ''
+	retries = 0
 
 	constructor(
 		private host: Host,
@@ -68,6 +71,7 @@ export class Conn {
 				ws.send(JSON.stringify({ type: 'auth', sig: await signChallenge(msg.name, msg.nonce) }))
 			} else if (msg.type === 'ready') {
 				this.tries = 0
+				this.retries = 0
 				this.term.reset()
 				this.set('open')
 				// 握手期间屏幕可能已经变过大小
@@ -76,6 +80,8 @@ export class Conn {
 		}
 		ws.onclose = e => {
 			if (this.ws !== ws) return
+			this.lastClose = e.reason ? `${e.code} ${e.reason}` : String(e.code)
+			this.retries++
 			if (e.code === UNAUTHORIZED) return this.set('unauthorized')
 			this.set('closed')
 			if (!this.stopped) this.timer = window.setTimeout(() => this.connect(), DELAYS[Math.min(this.tries++, DELAYS.length - 1)])

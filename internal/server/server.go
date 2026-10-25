@@ -15,10 +15,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -145,12 +147,14 @@ type message struct {
 
 func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	if !s.allowed(r) {
+		s.Log.Warn("origin rejected", "remote", r.RemoteAddr, "origin", r.Header.Get("Origin"), "host", r.Host)
 		http.Error(w, "origin not allowed", http.StatusForbidden)
 		return
 	}
 	// 来源上面自己查过了
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{Protocol}, InsecureSkipVerify: true})
 	if err != nil {
+		s.Log.Warn("websocket accept failed", "remote", r.RemoteAddr, "err", err)
 		return
 	}
 	defer c.CloseNow()
@@ -178,9 +182,9 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	if err := wsjson.Write(r.Context(), c, message{Type: "ready", Name: s.Cfg.Name}); err != nil {
 		return
 	}
-	s.Log.Info("session open", "remote", r.RemoteAddr)
-	s.pump(r.Context(), c, sess)
-	s.Log.Info("session closed", "remote", r.RemoteAddr)
+	s.Log.Info("session open", "remote", r.RemoteAddr, "cols", cols, "rows", rows)
+	why := s.pump(r.Context(), c, sess)
+	s.Log.Info("session closed", "remote", r.RemoteAddr, "why", why)
 }
 
 func (s *Server) handshake(ctx context.Context, c *websocket.Conn) (key string, cols, rows uint16, err error) {
@@ -212,23 +216,33 @@ func (s *Server) handshake(ctx context.Context, c *websocket.Conn) (key string, 
 }
 
 // pump 两头对拷，直到一边结束；另起一个心跳，及早发现手机那头已经没了的连接
-func (s *Server) pump(ctx context.Context, c *websocket.Conn, sess *term.Session) {
+// 返回结束的原因，记进日志
+func (s *Server) pump(ctx context.Context, c *websocket.Conn, sess *term.Session) string {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	var once sync.Once
+	var why string
+	note := func(reason string) { once.Do(func() { why = reason }) }
+	stop := func(reason string) {
+		note(reason)
+		cancel()
+	}
 
 	go func() {
-		defer cancel()
+		defer stop("output closed")
 		buf := make([]byte, 32*1024)
 		for {
 			n, err := sess.Read(buf)
 			if n > 0 {
-				if c.Write(ctx, websocket.MessageBinary, append([]byte{0}, buf[:n]...)) != nil {
+				if err := c.Write(ctx, websocket.MessageBinary, append([]byte{0}, buf[:n]...)); err != nil {
+					stop("write: " + err.Error())
 					return
 				}
 			}
 			if err != nil {
 				<-sess.Done()
 				code := sess.ExitCode()
+				note(fmt.Sprintf("command exited with code %d", code))
 				wsjson.Write(ctx, c, message{Type: "exit", Code: &code})
 				c.Close(websocket.StatusNormalClosure, "exit")
 				return
@@ -248,7 +262,7 @@ func (s *Server) pump(ctx context.Context, c *websocket.Conn, sess *term.Session
 				err := c.Ping(pctx)
 				pcancel()
 				if err != nil {
-					cancel()
+					stop("ping: " + err.Error())
 					return
 				}
 			}
@@ -258,7 +272,8 @@ func (s *Server) pump(ctx context.Context, c *websocket.Conn, sess *term.Session
 	for {
 		typ, data, err := c.Read(ctx)
 		if err != nil {
-			return
+			stop("read: " + err.Error())
+			return why
 		}
 		if typ != websocket.MessageBinary || len(data) == 0 {
 			continue

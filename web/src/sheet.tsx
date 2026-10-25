@@ -13,6 +13,14 @@ const STATUS: Record<State, string> = {
 	unauthorized: '这台手机没登记',
 }
 
+// 断开时带上关闭码和已经重连了几次：1006 是网络层断的，4401 是没登记，4500 是电脑上的命令起不来
+function status(state: State, host?: Host) {
+	const c = host && session(host).conn
+	if (state === 'closed' && c?.lastClose) return `已断开 ${c.lastClose}，第 ${c.retries} 次重连`
+	if (state === 'connecting' && c?.retries) return `连接中（上次 ${c.lastClose}，第 ${c.retries} 次）`
+	return STATUS[state]
+}
+
 export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: Host) => void }) {
 	const { host } = props
 	const root = useRef<HTMLDivElement>(null)
@@ -98,7 +106,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 				<span class="grabber" />
 				<span class="dot" data-state={state} />
 				<span class="title">{host?.name}</span>
-				<span class="status">{STATUS[state]}</span>
+				<span class="status">{status(state, host)}</span>
 			</header>
 			{/* 终端节点由 Session 自己挂进来，这里不放 Preact 管的子节点 */}
 			<div id="panes" ref={panes} />

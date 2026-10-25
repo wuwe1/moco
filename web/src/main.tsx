@@ -8,4 +8,5 @@ for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEv
 
 render(<App />, document.getElementById('root')!)
 
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/sw.js')
+// Service Worker 先停用（见 public/sw.js）：已经装上的让它更新成注销自己的版本
+navigator.serviceWorker?.getRegistrations().then(rs => rs.forEach(r => r.update()))
