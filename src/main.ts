@@ -24,7 +24,8 @@ const term = new Terminal({
 	fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
 	fontSize: Number(localStorage.getItem(FONT_KEY)) || 13,
 	theme,
-	scrollback: 5000,
+	// 不留本地回滚：滚动都交给 herdr。留了的话 fit 会在右边给滚动条预留 14px，就是那条缝
+	scrollback: 0,
 	cursorBlink: false,
 	// 不能设 disableStdin：它会拦下 xterm 发往终端的一切，包括滚轮转成的序列和对查询的应答。
 	// 触屏上 xterm 自己的输入框拿不到焦点（手势里拦了 touch 的默认行为），输入照样只走我们的输入框
