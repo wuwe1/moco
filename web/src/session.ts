@@ -8,6 +8,7 @@ import { Conn, type State } from './conn'
 import { theme } from './theme'
 import { dlog } from './debug'
 import { gestures } from './gestures'
+import { locate } from './grid'
 import { ImageLayer } from './images'
 import { fontSize, saveScreen, setFontSize, type Host } from './store'
 
@@ -108,16 +109,13 @@ export class Session {
 	// 那样 xterm.js 会把焦点抢到它自己的输入框，弹出另一个键盘
 	private click(clientX: number, clientY: number) {
 		const mouse = (this.term as any)._core?.coreMouseService
-		const screen = this.term.element?.querySelector('.xterm-screen')
-		if (this.term.modes.mouseTrackingMode === 'none' || !mouse?.triggerMouseEvent || !screen) return false
-		const r = screen.getBoundingClientRect()
-		const x = clientX - r.left
-		const y = clientY - r.top
+		const p = locate(this.term, clientX, clientY)
+		if (this.term.modes.mouseTrackingMode === 'none' || !mouse?.triggerMouseEvent || !p) return false
 		const at = {
-			col: Math.floor(x / (r.width / this.term.cols)),
-			row: Math.floor(y / (r.height / this.term.rows)),
-			x: Math.round(x),
-			y: Math.round(y),
+			col: p.col,
+			row: p.row,
+			x: Math.round(p.x),
+			y: Math.round(p.y),
 			button: 0,
 			ctrl: false,
 			alt: false,

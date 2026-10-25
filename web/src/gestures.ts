@@ -1,5 +1,6 @@
 // 终端上的手势：单指拖动 = 滚轮（交给 herdr / pi 自己滚，松手带惯性），双指捏合 = 改字号，轻点交给 onTap（点在哪由它定）
 import type { Terminal } from '@xterm/xterm'
+import { grid } from './grid'
 
 const FONT_MIN = 9
 const FONT_MAX = 24
@@ -19,18 +20,13 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 	let pinchFont = 0
 	let raf = 0
 
-	const cellHeight = () => {
-		const screen = term.element?.querySelector('.xterm-screen') as HTMLElement | null
-		return screen && term.rows ? screen.clientHeight / term.rows : 16
-	}
-
 	// 一行一个滚轮事件，位置是手指下面：herdr 按位置决定滚哪个窗格。
 	// 每帧最多发 WHEEL_PER_FRAME 个，多的留到下一帧：每个滚轮 herdr 都要重画，发太快手机收不过来
 	let queued = 0
 	let flushing = 0
 	const flush = () => {
 		flushing = 0
-		const target = term.element?.querySelector('.xterm-screen')
+		const target = grid(term)?.screen
 		if (!target) return (queued = 0)
 		const n = Math.min(Math.abs(queued), WHEEL_PER_FRAME)
 		const dir = Math.sign(queued)
@@ -56,7 +52,7 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 
 	const scrollBy = (dy: number) => {
 		acc += dy
-		const h = cellHeight()
+		const h = grid(term)?.ch ?? 16
 		const lines = Math.trunc(acc / h)
 		if (lines) {
 			acc -= lines * h
