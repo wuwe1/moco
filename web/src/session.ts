@@ -5,16 +5,11 @@ import { SerializeAddon } from '@xterm/addon-serialize'
 import { UnicodeGraphemesAddon } from '@xterm/addon-unicode-graphemes'
 import { Terminal } from '@xterm/xterm'
 import { Conn, type State } from './conn'
+import { theme } from './theme'
 import { dlog } from './debug'
 import { gestures } from './gestures'
 import { fontSize, saveScreen, setFontSize, type Host } from './store'
 
-// gruvbox 深色，和 herdr、Ghostty 的配色一致
-export const theme = {
-	background: '#282828', foreground: '#ebdbb2', cursor: '#ebdbb2', cursorAccent: '#282828', selectionBackground: '#504945',
-	black: '#282828', red: '#cc241d', green: '#98971a', yellow: '#d79921', blue: '#458588', magenta: '#b16286', cyan: '#689d6a', white: '#a89984',
-	brightBlack: '#928374', brightRed: '#fb4934', brightGreen: '#b8bb26', brightYellow: '#fabd2f', brightBlue: '#83a598', brightMagenta: '#d3869b', brightCyan: '#8ec07c', brightWhite: '#ebdbb2',
-}
 
 const sessions = new Map<string, Session>()
 const listeners = new Set<() => void>()

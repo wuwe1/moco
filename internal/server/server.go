@@ -1,12 +1,14 @@
 // Package server 是 mocod 的 HTTP 服务：/health、/pair、/ws。
 //
-// /ws 的协议（子协议 moco.v1）：
+// /ws 的协议（子协议 moco.v2，旧页面用 moco.v1）：
 //
-//	手机 → {type:"hello", key, cols, rows}
+//	手机 → {type:"hello", key, cols, rows, theme}  theme 只有 v2 用：回答程序对颜色的查询
 //	mocod → {type:"challenge", nonce, name}      nonce、签名都是 base64url
 //	手机 → {type:"auth", sig}                    对 auth.Message(name, nonce) 的 Ed25519 签名
 //	mocod → {type:"ready", name}                 之后开终端
-//	之后二进制帧第一个字节是类型：手机发 0=输入、1=改大小（JSON {cols,rows}），mocod 发 0=输出；
+//	之后二进制帧第一个字节是类型：手机发 0=输入、1=改大小（JSON {cols,rows}）；
+//	v1：mocod 发 0=终端的原始输出。
+//	v2：mocod 发 2=一帧（见 frames.go），手机画完回 3=确认（4 字节序号）。
 //	命令退出时 mocod 发 {type:"exit", code} 再关连接
 package server
 
@@ -28,10 +30,14 @@ import (
 
 	"github.com/wuwe1/moco/internal/auth"
 	"github.com/wuwe1/moco/internal/config"
+	"github.com/wuwe1/moco/internal/screen"
 	"github.com/wuwe1/moco/internal/term"
 )
 
-const Protocol = "moco.v1"
+const (
+	Protocol       = "moco.v1" // 原样转发终端输出
+	ProtocolFrames = "moco.v2" // 在电脑上维护画面，只发变化（internal/screen）
+)
 
 // 关连接的原因码：App 看到 4401 就提示重新配对
 const (
@@ -112,7 +118,7 @@ func (s *Server) preflight(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	s.cors(w, r)
-	writeJSON(w, http.StatusOK, map[string]any{"name": s.Cfg.Name, "version": s.Version, "protocol": Protocol})
+	writeJSON(w, http.StatusOK, map[string]any{"name": s.Cfg.Name, "version": s.Version, "protocol": ProtocolFrames, "protocols": []string{ProtocolFrames, Protocol}})
 }
 
 func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
@@ -147,6 +153,8 @@ type message struct {
 	Cols  uint16 `json:"cols,omitempty"`
 	Rows  uint16 `json:"rows,omitempty"`
 	Code  *int   `json:"code,omitempty"`
+
+	Theme screen.Theme `json:"theme,omitzero"`
 }
 
 func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +165,7 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	}
 	// 来源上面自己查过了
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		Subprotocols:       []string{Protocol},
+		Subprotocols:       []string{ProtocolFrames, Protocol},
 		InsecureSkipVerify: true,
 		// 终端输出里大量重复的控制序列，压缩后大约只剩五分之一；手机在外面用流量时差别很大
 		CompressionMode: websocket.CompressionContextTakeover,
@@ -167,19 +175,21 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer c.CloseNow()
-	if c.Subprotocol() != Protocol {
-		c.Close(websocket.StatusPolicyViolation, "subprotocol "+Protocol+" required")
+	proto := c.Subprotocol()
+	if proto != Protocol && proto != ProtocolFrames {
+		c.Close(websocket.StatusPolicyViolation, "subprotocol "+ProtocolFrames+" required")
 		return
 	}
 	c.SetReadLimit(1 << 20)
 
-	key, cols, rows, err := s.handshake(r.Context(), c)
+	hello, err := s.handshake(r.Context(), c)
 	if err != nil {
 		s.Log.Warn("auth failed", "remote", r.RemoteAddr, "err", err)
 		c.Close(CloseUnauthorized, err.Error())
 		return
 	}
-	go auth.Touch(key)
+	go auth.Touch(hello.Key)
+	cols, rows := hello.Cols, hello.Rows
 
 	sess, err := term.Start(s.Cfg.Command, cols, rows)
 	if err != nil {
@@ -191,20 +201,25 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	if err := wsjson.Write(r.Context(), c, message{Type: "ready", Name: s.Cfg.Name}); err != nil {
 		return
 	}
-	s.Log.Info("session open", "remote", r.RemoteAddr, "cols", cols, "rows", rows)
-	why := s.pump(r.Context(), c, sess)
+	s.Log.Info("session open", "remote", r.RemoteAddr, "protocol", proto, "cols", cols, "rows", rows)
+	var why string
+	if proto == ProtocolFrames {
+		why = s.pumpFrames(r.Context(), c, sess, hello)
+	} else {
+		why = s.pump(r.Context(), c, sess)
+	}
 	s.Log.Info("session closed", "remote", r.RemoteAddr, "why", why)
 }
 
-func (s *Server) handshake(ctx context.Context, c *websocket.Conn) (key string, cols, rows uint16, err error) {
+// handshake 验明手机身份，返回它的 hello（行列已经兜过底）
+func (s *Server) handshake(ctx context.Context, c *websocket.Conn) (hello message, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	var hello message
 	if err = wsjson.Read(ctx, c, &hello); err != nil {
 		return
 	}
 	if hello.Type != "hello" {
-		return "", 0, 0, errors.New("expected hello")
+		return hello, errors.New("expected hello")
 	}
 	if _, err = auth.Find(hello.Key); err != nil {
 		return
@@ -220,8 +235,8 @@ func (s *Server) handshake(ctx context.Context, c *websocket.Conn) (key string, 
 	if err = auth.Verify(hello.Key, a.Sig, s.Cfg.Name, nonce); err != nil {
 		return
 	}
-	cols, rows = max(hello.Cols, 20), max(hello.Rows, 5)
-	return hello.Key, cols, rows, nil
+	hello.Cols, hello.Rows = max(hello.Cols, 20), max(hello.Rows, 5)
+	return hello, nil
 }
 
 // pump 两头对拷，直到一边结束；另起一个心跳，及早发现手机那头已经没了的连接

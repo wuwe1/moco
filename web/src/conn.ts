@@ -5,6 +5,7 @@ import type { Terminal } from '@xterm/xterm'
 import { dlog } from './debug'
 import { deviceKey, signChallenge } from './keys'
 import type { Host } from './store'
+import { wireTheme } from './theme'
 
 export type State = 'connecting' | 'open' | 'closed' | 'unauthorized'
 
@@ -13,6 +14,8 @@ const DELAYS = [300, 1000, 2000, 4000]
 const HANDSHAKE_TIMEOUT = 10_000
 const UNAUTHORIZED = 4401
 const enc = new TextEncoder()
+const FRAME = 2
+const ACK = 3
 
 const frame = (type: number, body: string) => {
 	const b = enc.encode(body)
@@ -31,6 +34,7 @@ export class Conn {
 	// 自己按流解 UTF-8 再交给 xterm.js：一个字的字节可能被切在两帧里，
 	// xterm.js 6.0.0 遇到 3 字节的字切在第 2 字节后会把这个字丢掉（tools/vtcheck 里查到的）
 	private decoder = new TextDecoder()
+	private frameDecoder = new TextDecoder()
 	state: State = 'closed'
 	// 上一次断开的关闭码和原因，显示在抽屉的标题栏上，排查用
 	lastClose = ''
@@ -63,7 +67,8 @@ export class Conn {
 		this.set('connecting')
 		const url = this.host.url.replace(/^http/, 'ws') + '/ws'
 		dlog(`新建 WebSocket ${url}`)
-		const ws = new WebSocket(url, ['moco.v1'])
+		// v2：mocod 在电脑上维护画面，只发变化，手机慢了也不会堵住程序；老的 mocod 只会 v1
+		const ws = new WebSocket(url, ['moco.v2', 'moco.v1'])
 		ws.binaryType = 'arraybuffer'
 		const guard = window.setTimeout(() => {
 			if (this.ws === ws && this.state !== 'open') {
@@ -72,10 +77,10 @@ export class Conn {
 			}
 		}, HANDSHAKE_TIMEOUT)
 		ws.onopen = async () => {
-			dlog(`WebSocket 打开，子协议 ${ws.protocol || '无'}`)
+			dlog(`WebSocket 打开，协议 ${ws.protocol || '无'}`)
 			try {
 				const { pub } = await deviceKey()
-				ws.send(JSON.stringify({ type: 'hello', key: pub, cols: this.term.cols, rows: this.term.rows }))
+				ws.send(JSON.stringify({ type: 'hello', key: pub, cols: this.term.cols, rows: this.term.rows, theme: wireTheme }))
 			} catch (e) {
 				dlog(`取设备密钥失败：${e}`)
 			}
@@ -85,6 +90,7 @@ export class Conn {
 			if (typeof e.data !== 'string') {
 				const buf = new Uint8Array(e.data as ArrayBuffer)
 				if (buf[0] === 0) this.term.write(this.decoder.decode(buf.subarray(1), { stream: true }))
+				else if (buf[0] === FRAME) this.frame(ws, buf)
 				return
 			}
 			const msg = JSON.parse(e.data)
@@ -118,6 +124,23 @@ export class Conn {
 			}
 		}
 		this.ws = ws
+	}
+
+	// v2 的一帧：[2][序号 u32][列 u16][行 u16][控制序列]。画完回确认，mocod 才发下一帧。
+	// 尺寸和手机现在的对不上，是改尺寸之前出的帧：不画，也照样确认（改完尺寸 mocod 会整屏重发）
+	private frame(ws: WebSocket, buf: Uint8Array) {
+		const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+		const seq = view.getUint32(1)
+		const cols = view.getUint16(5)
+		const rows = view.getUint16(7)
+		const ack = () => {
+			const out = new Uint8Array(5)
+			out[0] = ACK
+			new DataView(out.buffer).setUint32(1, seq)
+			if (this.ws === ws && ws.readyState === WebSocket.OPEN) ws.send(out)
+		}
+		if (cols !== this.term.cols || rows !== this.term.rows) return ack()
+		this.term.write(this.frameDecoder.decode(buf.subarray(9)), ack)
 	}
 
 	// 回到前台、网络恢复：立刻重连，不等退避。后台待久了的连接可能已经半死，直接换一条

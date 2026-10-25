@@ -2,6 +2,7 @@
 //
 //	vtcheck capture -o herdr.jsonl -size 52x40 -script "wait 2; wheel down 10 20 15; resize 52x18; wait 1" -- herdr
 //	vtcheck frames herdr.jsonl > f.jsonl       // 重新切段：每段结束在 herdr 的一帧结束（?2026l）上
+//	vtcheck sync herdr.jsonl sent.jsonl > vt.json  // 过一遍 internal/screen：sent.jsonl 是发给手机的帧，vt.json 是每帧时电脑上的画面
 //	vtcheck dump herdr.jsonl > vt.json        // x/vt 在各个检查点的整屏（-frames 只在一帧结束时截）
 //	node tools/vtcheck/xterm.mjs herdr.jsonl   // xterm.js 同样的检查点，再和 vt.json 逐格对比
 //
@@ -15,6 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"image/color"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -25,6 +27,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
+
+	"github.com/wuwe1/moco/internal/screen"
 
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -48,6 +52,8 @@ func main() {
 		err = dump(os.Args[2:])
 	case "frames":
 		err = frames(os.Args[2:])
+	case "sync":
+		err = syncFrames(os.Args[2:])
 	default:
 		err = fmt.Errorf("unknown command %q", os.Args[1])
 	}
@@ -224,6 +230,61 @@ func frames(args []string) error {
 		enc.Encode(record{D: pending})
 	}
 	return nil
+}
+
+// syncFrames 把录下的输出喂给 internal/screen（mocod 用的那一套），记下它出的每一帧；
+// 同时另起一个模拟器跟着吃同样的输出，在每帧发出时截下电脑上的画面。
+// 拿 xterm.mjs 回放这些帧再对比，就知道手机画出来的和电脑上的是不是一样
+func syncFrames(args []string) error {
+	recs, err := readRecords(args[0])
+	if err != nil {
+		return err
+	}
+	out, err := os.Create(args[1])
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	enc := json.NewEncoder(out)
+
+	cols, rows := recs[0].R[0], recs[0].R[1]
+	scr := screen.New(cols, rows, screen.Theme{}, io.Discard)
+	defer scr.Close()
+	ref := vt.NewEmulator(cols, rows)
+	go io.Copy(io.Discard, ref)
+	modes := map[string]bool{"?7": true, "?25": true}
+	ref.SetCallbacks(vt.Callbacks{
+		EnableMode:  func(m ansi.Mode) { modes[modeName(m)] = true },
+		DisableMode: func(m ansi.Mode) { delete(modes, modeName(m)) },
+	})
+
+	n := 0 // sent.jsonl 里第几条
+	enc.Encode(record{R: []int{cols, rows}})
+	var cps []checkpoint
+	emit := func() {
+		f, _, _, _ := scr.Frame()
+		if f == nil {
+			return
+		}
+		enc.Encode(record{D: f})
+		n++
+		cp := snapshot(ref, n, modes)
+		cps = append(cps, cp)
+	}
+	for i, r := range recs {
+		if i > 0 && r.R != nil {
+			scr.Resize(r.R[0], r.R[1])
+			ref.Resize(r.R[0], r.R[1])
+			enc.Encode(record{R: r.R})
+			n++
+		}
+		if r.D != nil {
+			scr.Write(r.D)
+			ref.Write(r.D)
+		}
+		emit()
+	}
+	return json.NewEncoder(os.Stdout).Encode(cps)
 }
 
 func dump(args []string) error {
