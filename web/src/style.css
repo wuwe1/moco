@@ -117,16 +117,7 @@ button.icon { font-size: 22px; font-weight: 300; }
 	background: var(--term);
 	pointer-events: none;
 }
-.thumb iframe {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 200%;
-	height: 200%;
-	border: 0;
-	transform: scale(.5);
-	transform-origin: 0 0;
-}
+.thumb img { display: block; width: 100%; }
 .thumb .empty {
 	position: absolute;
 	inset: 0;
@@ -229,6 +220,15 @@ input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 	transition: transform .38s var(--ease);
 }
 #sheet.dragging { transition: none; }
+#sheet::after {
+	content: '';
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	height: 100lvh;
+	background: var(--bg);
+}
 
 #grab {
 	position: relative;

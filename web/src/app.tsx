@@ -7,7 +7,6 @@ import { deviceName, dropScreen, fontKey, loadHosts, loadScreen, normalizeUrl, s
 
 type Health = 'checking' | 'online' | 'offline'
 
-const THUMB_STYLE = '<style>html,body{margin:0;background:#282828;overflow:hidden}pre{margin:0;padding:4px}</style>'
 
 export function App() {
 	const [hosts, setHosts] = useState(loadHosts)
@@ -99,7 +98,7 @@ function Home(props: { hosts: Host[]; hidden: boolean; onOpen: (h: Host) => void
 						<li key={h.id} class="host" onClick={() => props.onOpen(h)}>
 							<div class="thumb">
 								{screen ? (
-									<iframe sandbox="" srcdoc={THUMB_STYLE + screen.html} tabIndex={-1} aria-hidden="true" />
+									<img src={screen.image} alt="" />
 								) : (
 									<span class="empty">还没打开过</span>
 								)}

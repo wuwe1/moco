@@ -1,5 +1,4 @@
 import { FitAddon } from '@xterm/addon-fit'
-import { SerializeAddon } from '@xterm/addon-serialize'
 import { UnicodeGraphemesAddon } from '@xterm/addon-unicode-graphemes'
 import { Terminal } from '@xterm/xterm'
 import { useEffect, useState } from 'preact/hooks'
@@ -8,6 +7,7 @@ import { theme } from './theme'
 import { dlog } from './debug'
 import { gestures } from './gestures'
 import { grid, locate } from './grid'
+import { renderThumbnail } from './thumbnail'
 import { ImageLayer } from './images'
 import { fontKey, fontSize, saveScreen, setFontKey, setFontSize, type Host } from './store'
 import { fontStack, loadFont, type FontKey } from './fonts'
@@ -48,7 +48,6 @@ export class Session {
 	readonly conn: Conn
 	readonly images: ImageLayer
 	private fit = new FitAddon()
-	private serializer = new SerializeAddon()
 	private opened = false
 	private panned = false
 	onPlainTap = () => {}
@@ -71,7 +70,6 @@ export class Session {
 		this.term.loadAddon(new UnicodeGraphemesAddon())
 		this.term.unicode.activeVersion = '15-graphemes'
 		this.term.loadAddon(this.fit)
-		this.term.loadAddon(this.serializer)
 		this.images = new ImageLayer(this.term)
 		this.conn = new Conn(
 			host,
@@ -192,7 +190,8 @@ export class Session {
 
 	snapshot() {
 		if (!this.opened || this.conn.state !== 'open') return
-		saveScreen(this.host.id, { html: this.serializer.serializeAsHTML({ includeGlobalBackground: true }), at: Date.now() })
+		const image = renderThumbnail(this.term)
+		if (image) saveScreen(this.host.id, { image, at: Date.now() })
 	}
 
 	dispose() {

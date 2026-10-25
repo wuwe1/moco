@@ -296,9 +296,9 @@ try {
 	})
 	await check('拖把手收起，首页有缩略图', async () => {
 		await closeSheet()
-		await until(() => page.locator('.host .thumb iframe').count(), '缩略图')
-		const html = await page.locator('.host .thumb iframe').getAttribute('srcdoc')
-		if (!html.includes('img-done')) throw new Error('缩略图里没有最后一屏')
+		await until(() => page.locator('.host .thumb img').count(), '缩略图')
+		const img = await page.locator('.host .thumb img').evaluate(i => i.decode().then(() => [i.src.slice(0, 22), i.naturalWidth]))
+		if (img[0] !== 'data:image/png;base64,' || img[1] < 300) throw new Error('缩略图不对：' + img)
 		await until(async () => (await page.locator('.host .dot').getAttribute('data-state')) === 'open', '首页圆点 open')
 	})
 	await check('首页换字体', async () => {
@@ -334,6 +334,8 @@ try {
 		await keyboardUp(348)
 		await sleep(400)
 		if ((await rows()) !== full) throw new Error(`行数变了：${full} → ${await rows()}`)
+		const under = await page.evaluate(() => !!document.elementFromPoint(innerWidth / 2, innerHeight - 5)?.closest('#sheet'))
+		if (!under) throw new Error('按键栏下面透出了首页')
 		if (!(await cursorShown())) throw new Error('光标被键盘挡住了')
 		await page.keyboard.type('clear')
 		await page.keyboard.press('Enter')

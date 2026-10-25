@@ -8,7 +8,7 @@ export type Host = {
 	lastUsed?: number
 }
 
-export type Screen = { html: string; at: number }
+export type Screen = { image: string; at: number }
 
 const HOSTS = 'moco.hosts'
 const FONT = 'moco.fontSize'
@@ -30,7 +30,8 @@ export function saveHosts(hosts: Host[]) {
 
 export function loadScreen(id: string): Screen | undefined {
 	try {
-		return JSON.parse(localStorage.getItem(screenKey(id)) ?? 'null') ?? undefined
+		const s = JSON.parse(localStorage.getItem(screenKey(id)) ?? 'null')
+		return typeof s?.image === 'string' ? s : undefined
 	} catch {
 		return undefined
 	}
