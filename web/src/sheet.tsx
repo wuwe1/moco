@@ -139,6 +139,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 					<button data-key="down" data-repeat>↓</button>
 					<button data-key="right" data-repeat>→</button>
 					<button data-key="enter">⏎</button>
+					<button data-key="paste">粘贴</button>
 				</div>
 				<button id="kbd" aria-label="键盘">⌨</button>
 				<textarea id="input" rows={1} autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck={false} />

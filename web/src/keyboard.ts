@@ -1,6 +1,7 @@
 // 键盘：看不见的 textarea 收系统键盘和输入法，按键栏补上手机键盘没有的键
 // 打一个字就发一个字；拼音这类输入法拼完（compositionend）才发
 import type { Terminal } from '@xterm/xterm'
+import { dlog } from './debug'
 
 // 框里常驻一个零宽字符：框是空的时候 iOS 不报删除，退格就发不出去
 const SENTINEL = '​'
@@ -37,8 +38,13 @@ export function keyboard(root: HTMLElement, term: () => Terminal | undefined, se
 	}
 	const paste = (s: string) => {
 		s = s.replace(/\r?\n/g, '\r')
-		send(term()?.modes.bracketedPasteMode ? `\x1b[200~${s}\x1b[201~` : s)
+		const bracketed = term()?.modes.bracketedPasteMode
+		// 程序没开粘贴模式时，多行会被当成一行行回车执行：先问一句
+		const lines = s.split('\r').length
+		if (!bracketed && lines > 1 && !confirm(`粘贴 ${lines} 行？终端里的程序没开粘贴模式，每一行都会像按了回车一样执行。`)) return
+		send(bracketed ? `\x1b[200~${s}\x1b[201~` : s)
 	}
+
 
 	const keys: Record<string, () => string> = {
 		esc: () => '\x1b',
@@ -112,6 +118,7 @@ export function keyboard(root: HTMLElement, term: () => Terminal | undefined, se
 			e.preventDefault()
 			btn.classList.add('down')
 			if (key === 'ctrl') return setCtrl(!ctrl)
+			if (key === 'paste') return
 			send(keys[key]())
 			if (btn.hasAttribute('data-repeat')) hold = window.setTimeout(() => (hold = window.setInterval(() => send(keys[key]()), 60)), 400)
 		})
@@ -119,6 +126,16 @@ export function keyboard(root: HTMLElement, term: () => Terminal | undefined, se
 		btn.addEventListener('pointercancel', stop)
 		btn.addEventListener('pointerleave', stop)
 	}
+
+	// 粘贴：iOS 只在点击（click）里放行读剪贴板，按下（pointerdown）不算；系统会先弹一个「粘贴」气泡让人确认
+	root.querySelector('[data-key="paste"]')?.addEventListener('click', async () => {
+		try {
+			const text = await navigator.clipboard.readText()
+			if (text) paste(text)
+		} catch (e) {
+			dlog(`读剪贴板失败：${e}`)
+		}
+	})
 
 	const kbd = root.querySelector('#kbd') as HTMLButtonElement
 	kbd.addEventListener('pointerdown', e => {
