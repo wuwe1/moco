@@ -3,6 +3,7 @@ import type { Terminal } from '@xterm/xterm'
 
 const FONT_MIN = 9
 const FONT_MAX = 24
+const WHEEL_PER_FRAME = 3
 
 export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: () => void; onFont: (size: number) => void }) {
 	let mode: 'none' | 'scroll' | 'pinch' = 'none'
@@ -23,13 +24,19 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: () => v
 		return screen && term.rows ? screen.clientHeight / term.rows : 16
 	}
 
-	// 一行发一个滚轮事件，位置是手指下面：herdr 按位置决定滚哪个窗格
-	const wheel = (lines: number) => {
+	// 一行一个滚轮事件，位置是手指下面：herdr 按位置决定滚哪个窗格。
+	// 每帧最多发 WHEEL_PER_FRAME 个，多的留到下一帧：每个滚轮 herdr 都要重画，发太快手机收不过来
+	let queued = 0
+	let flushing = 0
+	const flush = () => {
+		flushing = 0
 		const target = term.element?.querySelector('.xterm-screen')
-		if (!target) return
-		for (let i = 0; i < Math.abs(lines); i++) {
+		if (!target) return (queued = 0)
+		const n = Math.min(Math.abs(queued), WHEEL_PER_FRAME)
+		const dir = Math.sign(queued)
+		for (let i = 0; i < n; i++) {
 			target.dispatchEvent(new WheelEvent('wheel', {
-				deltaY: Math.sign(lines),
+				deltaY: dir,
 				deltaMode: WheelEvent.DOM_DELTA_LINE,
 				clientX: x,
 				clientY: y,
@@ -37,6 +44,14 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: () => v
 				cancelable: true,
 			}))
 		}
+		queued -= dir * n
+		if (queued) flushing = requestAnimationFrame(flush)
+	}
+	const wheel = (lines: number) => {
+		// 换方向时丢掉还没发的
+		if (Math.sign(lines) !== Math.sign(queued)) queued = 0
+		queued += lines
+		flushing ||= requestAnimationFrame(flush)
 	}
 
 	const scrollBy = (dy: number) => {
@@ -71,6 +86,7 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: () => v
 		e.preventDefault()
 		e.stopPropagation()
 		cancelAnimationFrame(raf)
+		queued = 0
 		if (e.touches.length >= 2) {
 			mode = 'pinch'
 			pinchDist = dist(e.touches)

@@ -37,6 +37,10 @@ const Protocol = "moco.v1"
 const (
 	CloseUnauthorized websocket.StatusCode = 4401
 	CloseStartFailed  websocket.StatusCode = 4500
+	CloseTooSlow      websocket.StatusCode = 4503 // 手机收得太慢，积压超过 maxPending；手机照常重连
+
+	maxPending = 8 << 20   // 积压上限
+	maxFrame   = 256 << 10 // 一帧最多带这么多输出
 )
 
 type Server struct {
@@ -152,7 +156,12 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// 来源上面自己查过了
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{Protocol}, InsecureSkipVerify: true})
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		Subprotocols:       []string{Protocol},
+		InsecureSkipVerify: true,
+		// 终端输出里大量重复的控制序列，压缩后大约只剩五分之一；手机在外面用流量时差别很大
+		CompressionMode: websocket.CompressionContextTakeover,
+	})
 	if err != nil {
 		s.Log.Warn("websocket accept failed", "remote", r.RemoteAddr, "err", err)
 		return
@@ -228,18 +237,67 @@ func (s *Server) pump(ctx context.Context, c *websocket.Conn, sess *term.Session
 		cancel()
 	}
 
+	// 终端输出先进缓冲区，读终端的一侧从不等网络：手机那头慢了，herdr 也不会被卡住
+	// （它发现客户端收不动会把客户端踢掉）。写网络的一侧每次把攒下的合成一帧发出去。
+	var (
+		mu      sync.Mutex
+		pending []byte
+		ended   bool
+		wake    = make(chan struct{}, 1)
+	)
+	signal := func() {
+		select {
+		case wake <- struct{}{}:
+		default:
+		}
+	}
+
 	go func() {
-		defer stop("output closed")
 		buf := make([]byte, 32*1024)
 		for {
 			n, err := sess.Read(buf)
-			if n > 0 {
-				if err := c.Write(ctx, websocket.MessageBinary, append([]byte{0}, buf[:n]...)); err != nil {
+			mu.Lock()
+			pending = append(pending, buf[:n]...)
+			over := len(pending) > maxPending
+			if err != nil {
+				ended = true
+			}
+			mu.Unlock()
+			signal()
+			if over {
+				// 积压太多：断开，让手机重连；重连后 herdr 会重画一整屏，比慢慢追上快
+				note(fmt.Sprintf("client too slow: %d bytes pending", maxPending))
+				c.Close(CloseTooSlow, "client too slow")
+				cancel()
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer stop("output closed")
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-wake:
+			}
+			mu.Lock()
+			out, done := pending, ended
+			pending = nil
+			mu.Unlock()
+			for len(out) > 0 {
+				n := min(len(out), maxFrame)
+				if err := c.Write(ctx, websocket.MessageBinary, append([]byte{0}, out[:n]...)); err != nil {
 					stop("write: " + err.Error())
 					return
 				}
+				out = out[n:]
 			}
-			if err != nil {
+			if done {
 				<-sess.Done()
 				code := sess.ExitCode()
 				note(fmt.Sprintf("command exited with code %d", code))

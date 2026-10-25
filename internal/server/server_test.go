@@ -5,11 +5,11 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,23 +25,47 @@ var b64 = base64.RawURLEncoding
 const origin = "https://moco.example.com"
 
 func setup(t *testing.T) (*httptest.Server, string, ed25519.PrivateKey) {
+	ts, key, priv, _ := setupCmd(t, "cat")
+	return ts, key, priv
+}
+
+// 日志写进这里，测试结束后查结束原因
+type logBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *logBuf) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *logBuf) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+func setupCmd(t *testing.T, command ...string) (*httptest.Server, string, ed25519.PrivateKey, *logBuf) {
 	t.Helper()
 	t.Setenv("MOCOD_HOME", t.TempDir())
 	t.Setenv("SHELL", "/bin/sh")
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	key := b64.EncodeToString(pub)
+	logs := &logBuf{}
 	code, _, _ := auth.NewPairing()
 	if err := auth.Pair(code, key, "test"); err != nil {
 		t.Fatal(err)
 	}
 	s := &Server{
-		Cfg:     config.Config{Name: "box", Origins: []string{"moco.example.com"}, Command: []string{"cat"}},
+		Cfg:     config.Config{Name: "box", Origins: []string{"moco.example.com"}, Command: command},
 		Version: "test",
-		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Log:     slog.New(slog.NewTextHandler(logs, nil)),
 	}
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
-	return ts, key, priv
+	return ts, key, priv, logs
 }
 
 func dial(t *testing.T, ts *httptest.Server, from string) (*websocket.Conn, error) {
@@ -139,5 +163,34 @@ func TestPairEndpointCORS(t *testing.T) {
 	res, _ = http.DefaultClient.Do(req)
 	if res.StatusCode != http.StatusForbidden {
 		t.Fatalf("foreign preflight: %d", res.StatusCode)
+	}
+}
+
+// 手机收得慢：服务端照样把终端读空，积压到上限就用 4503 断开，而不是把终端里的程序卡住
+func TestSlowClientIsDropped(t *testing.T) {
+	ts, key, priv, logs := setupCmd(t, "head", "-c", "100000000", "/dev/urandom")
+	c, err := dial(t, ts, origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	wsjson.Write(ctx, c, message{Type: "hello", Key: key, Cols: 80, Rows: 24})
+	var ch message
+	wsjson.Read(ctx, c, &ch)
+	nonce, _ := b64.DecodeString(ch.Nonce)
+	wsjson.Write(ctx, c, message{Type: "auth", Sig: b64.EncodeToString(ed25519.Sign(priv, auth.Message(ch.Name, nonce)))})
+
+	// 一直不读，等服务端放弃
+	deadline := time.Now().Add(20 * time.Second)
+	for !strings.Contains(logs.String(), "session closed") {
+		if time.Now().After(deadline) {
+			t.Fatalf("session never closed; logs:\n%s", logs)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !strings.Contains(logs.String(), "client too slow") {
+		t.Fatalf("want client too slow, logs:\n%s", logs)
 	}
 }
