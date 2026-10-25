@@ -160,8 +160,15 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 					autocomplete="off"
 					autocorrect="off"
 					spellcheck={false}
-					onFocus={() => setTyping(true)}
-					onBlur={() => setTyping(false)}
+					onFocus={() => {
+						dlog('输入框拿到焦点')
+						setTyping(true)
+					}}
+					onBlur={e => {
+						const to = e.relatedTarget as HTMLElement | null
+						dlog(`输入框失去焦点，焦点去了 ${to ? to.tagName.toLowerCase() + (to.className ? '.' + to.className : '') : '无（键盘收起或点了别处）'}`)
+						setTyping(false)
+					}}
 				/>
 			</div>
 			{picture && <Lightbox img={picture} onClose={() => setPicture(undefined)} />}

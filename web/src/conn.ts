@@ -53,6 +53,7 @@ export class Conn {
 	private placementsOnNextFrame?: Placement[]
 	private unlog = () => {}
 	onFrameDrawn = () => {}
+	private resizedAt = 0
 
 	constructor(
 		private host: Host,
@@ -177,6 +178,10 @@ export class Conn {
 			return ack()
 		}
 		this.term.write(this.frameDecoder.decode(body), () => {
+			if (this.resizedAt) {
+				dlog(`${cols}×${rows} 的第一帧：改大小后 ${Math.round(performance.now() - this.resizedAt)}ms 画上`)
+				this.resizedAt = 0
+			}
 			ack()
 			this.onFrameDrawn()
 		})
@@ -209,6 +214,7 @@ export class Conn {
 	}
 
 	resize(cols: number, rows: number) {
+		this.resizedAt = performance.now()
 		if (this.state === 'open') this.ws?.send(frame(RESIZE, JSON.stringify({ cols, rows, cell: this.images.cellSize() })))
 	}
 }

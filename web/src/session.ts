@@ -183,7 +183,10 @@ export class Session {
 		shot.style.top = `${screen.offsetTop}px`
 		screen.parentElement!.appendChild(shot)
 		this.frozen = shot
-		this.thawTimer = window.setTimeout(() => this.thaw(), THAW_AFTER_MS)
+		this.thawTimer = window.setTimeout(() => {
+			dlog(`截图盖了 ${THAW_AFTER_MS}ms 还没等到新尺寸的帧，直接揭掉`)
+			this.thaw()
+		}, THAW_AFTER_MS)
 	}
 
 	private thaw() {
