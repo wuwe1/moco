@@ -201,6 +201,16 @@ try {
 		await until(async () => { const t = await screenText(); return count(t, 'abZ') + count(t, 'aZb') >= 2 }, '输出')
 		if (count(await screenText(), 'aZb')) throw new Error('划动时发了方向键')
 	})
+	await check('灰字（SGR 2）：真彩色的也是半透明', async () => {
+		await page.keyboard.type("printf 'n0 \\033[2mDIM1\\033[0m \\033[2;38;2;235;219;178mDIM2\\033[0m\\n'")
+		await page.keyboard.press('Enter')
+		await until(async () => (await screenText()).includes('DIM2 '), 'DIM2')
+		const alphas = await page.evaluate(() => [...document.querySelectorAll('.pane:not([hidden]) .xterm-rows span')]
+			.filter(s => /^DIM[12]$/.test(s.textContent.trim()))
+			.map(s => [s.textContent.trim(), getComputedStyle(s).webkitTextFillColor]))
+		for (const [name, c] of alphas) if (!/(0\.5\)|\/ ?0\.5\))$/.test(c)) throw new Error(`${name} 不灰：${c}`)
+		if (alphas.length < 2) throw new Error('没找到灰字 ' + JSON.stringify(alphas))
+	})
 	await check('kitty 图：画在 canvas 上', async () => {
 		const red = Buffer.from(Array(16).fill([255, 0, 0]).flat()).toString('base64')
 		await page.keyboard.type(`clear; printf '\\033_Ga=T,f=24,s=4,v=4,i=7,c=8,r=4;${red}\\033\\\\'; echo; echo img-done`)

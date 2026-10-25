@@ -34,8 +34,10 @@ const SLOP_PX = 12
 const REPEAT_AFTER_MS = 400
 const REPEAT_EVERY_MS = 60
 
-function pressable(btn: HTMLElement, on: { release: () => void; repeat?: () => void }) {
+// click：iOS 只在 click 里放行读剪贴板；在 pointerup 里 focus() 输入框，随后 iOS 补发的那次轻点会把焦点又拿走，键盘弹一下就收回去
+function pressable(btn: HTMLElement, on: { release?: () => void; click?: () => void; repeat?: () => void }) {
 	let armed = false
+	let released = false
 	let repeating = false
 	let timer = 0
 	const over = (e: PointerEvent) => {
@@ -64,11 +66,18 @@ function pressable(btn: HTMLElement, on: { release: () => void; repeat?: () => v
 		if (armed && !over(e)) cancel()
 	})
 	btn.addEventListener('pointerup', e => {
-		const released = armed && !repeating && over(e)
+		released = armed && !repeating && over(e)
 		cancel()
-		if (released) on.release()
+		if (released) on.release?.()
 	})
 	btn.addEventListener('pointercancel', cancel)
+	const { click } = on
+	if (click)
+		btn.addEventListener('click', () => {
+			if (!released) return
+			released = false
+			click()
+		})
 }
 
 export function keyboard(root: HTMLElement, term: () => Terminal | undefined, send: (s: string) => void, onPasteFailed: () => void) {
@@ -150,20 +159,7 @@ export function keyboard(root: HTMLElement, term: () => Terminal | undefined, se
 	})
 	input.addEventListener('focus', reset)
 
-	let pasteReleased = false
-	for (const btn of root.querySelectorAll<HTMLButtonElement>('#bar [data-key]')) {
-		const key = keyById.get(btn.dataset.key!)!
-		if (key.kind === 'send') {
-			const fire = () => send(key.seq(term()))
-			pressable(btn, { release: fire, repeat: key.repeat ? fire : undefined })
-		} else if (key.kind === 'ctrl') pressable(btn, { release: () => setCtrl(!ctrl) })
-		else pressable(btn, { release: () => (pasteReleased = true) })
-	}
-
-	// 粘贴：iOS 只在点击（click）里放行读剪贴板，按下（pointerdown）不算；系统会先弹一个「粘贴」气泡让人确认
-	root.querySelector('[data-key="paste"]')?.addEventListener('click', async () => {
-		if (!pasteReleased) return
-		pasteReleased = false
+	const readClipboard = async () => {
 		try {
 			const text = await navigator.clipboard.readText()
 			dlog(`读剪贴板：${text.length} 个字`)
@@ -173,10 +169,18 @@ export function keyboard(root: HTMLElement, term: () => Terminal | undefined, se
 			dlog(`读剪贴板失败：${e}`)
 			onPasteFailed()
 		}
-	})
+	}
+	for (const btn of root.querySelectorAll<HTMLButtonElement>('#bar [data-key]')) {
+		const key = keyById.get(btn.dataset.key!)!
+		if (key.kind === 'send') {
+			const fire = () => send(key.seq(term()))
+			pressable(btn, { release: fire, repeat: key.repeat ? fire : undefined })
+		} else if (key.kind === 'ctrl') pressable(btn, { release: () => setCtrl(!ctrl) })
+		else pressable(btn, { click: readClipboard })
+	}
 
 	pressable(root.querySelector<HTMLButtonElement>('#kbd')!, {
-		release: () => {
+		click: () => {
 			if (document.activeElement === input) input.blur()
 			else input.focus()
 		},
