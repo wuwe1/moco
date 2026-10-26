@@ -1,14 +1,15 @@
-import { Bold, Check, ChevronLeft, FileUp, KeyRound, Minus, Plus, Sparkles, TextCursor, Trash2, Type } from 'lucide-react'
+import { Bell, BellRing, Bold, Check, ChevronLeft, FileUp, KeyRound, Minus, Plus, Sparkles, TextCursor, Trash2, Type } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup, ButtonGroupText } from '@/components/ui/button-group'
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
-import { Item, ItemActions, ItemContent, ItemGroup, ItemMedia, ItemSeparator, ItemTitle } from '@/components/ui/item'
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSeparator, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { CJK_FONTS, fontChoices, fontKey, importFont, removeFont, type CjkFont, type FontChoice } from './fonts'
 import { fingerprint } from './keys'
+import { disablePush, enablePush, pushEnabled, pushSupport, testPush, type PerHost } from './push'
 import { applyFontToAllSessions, applyLookToAllSessions, setFontSizeForAllSessions } from './session'
 import {
 	allThemes,
@@ -103,6 +104,71 @@ function ImportTheme(props: { open: boolean; onOpenChange: (open: boolean) => vo
 				</DrawerFooter>
 			</DrawerContent>
 		</Drawer>
+	)
+}
+
+const SUPPORT_NOTE = {
+	ok: 'agent 等你批准、问你问题、干完活时推到手机',
+	install: 'iPhone 上要先在 Safari 里点分享 → 添加到主屏幕，从主屏幕打开 moco 再来开',
+	denied: '通知被关了：到系统设置 → 通知 → moco 打开',
+	unsupported: '这个浏览器不支持网页推送',
+}
+
+// 每台电脑的结果连成一句：全成功说几台，有失败的列出来
+const summary = (r: PerHost, ok: string) => {
+	const bad = r.filter(x => x.error)
+	if (!bad.length) return r.length ? `${ok}（${r.length} 台电脑）` : '还没有电脑'
+	return bad.map(x => `${x.name}：${x.error}`).join('；')
+}
+
+function NotifySection() {
+	const support = pushSupport()
+	const [on, setOn] = useState(pushEnabled)
+	const [busy, setBusy] = useState(false)
+	const [note, setNote] = useState('')
+	const run = async (fn: () => Promise<string>) => {
+		setBusy(true)
+		try {
+			setNote(await fn())
+		} catch (e) {
+			setNote(e instanceof Error ? e.message : String(e))
+		} finally {
+			setOn(pushEnabled())
+			setBusy(false)
+		}
+	}
+	return (
+		<Section title="通知">
+			<Item size="sm">
+				<ItemMedia>
+					<Bell className="size-5 text-muted-foreground" />
+				</ItemMedia>
+				<ItemContent>
+					<ItemTitle className="text-base font-normal">agent 的通知</ItemTitle>
+					<ItemDescription>{note || SUPPORT_NOTE[support]}</ItemDescription>
+				</ItemContent>
+				<ItemActions>
+					<Switch
+						aria-label="agent 的通知"
+						checked={on}
+						disabled={busy || (support !== 'ok' && !on)}
+						onCheckedChange={v => run(async () => (v ? summary(await enablePush(), '已打开') : summary(await disablePush(), '已关掉')))}
+					/>
+				</ItemActions>
+			</Item>
+			{on && (
+				<Item size="sm" asChild>
+					<button type="button" disabled={busy} onClick={() => run(async () => summary(await testPush(), '发出去了'))}>
+						<ItemMedia>
+							<BellRing className="size-5 text-muted-foreground" />
+						</ItemMedia>
+						<ItemContent>
+							<ItemTitle className="text-base font-normal">发一条试试</ItemTitle>
+						</ItemContent>
+					</button>
+				</Item>
+			)}
+		</Section>
 	)
 }
 
@@ -366,6 +432,8 @@ export function SettingsPage(props: { onBack: () => void }) {
 					</Item>
 				))}
 			</Section>
+
+			<NotifySection />
 
 			<Section title="这台手机">
 				<Item size="sm">

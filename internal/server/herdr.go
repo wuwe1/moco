@@ -60,7 +60,7 @@ type herdrMsg struct {
 	Herdr *herdr.State `json:"herdr"`
 }
 
-func (s *Server) watch(ctx context.Context, c *websocket.Conn) string {
+func (s *Server) watch(ctx context.Context, c *websocket.Conn, key string) string {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var once sync.Once
@@ -97,7 +97,7 @@ func (s *Server) watch(ctx context.Context, c *websocket.Conn) string {
 		}
 		switch data[0] {
 		case msgRequest:
-			s.answer(ctx, c, data)
+			s.answer(ctx, c, key, data)
 		case msgLog:
 			s.Log.Info("phone", "msg", string(data[1:]))
 		}

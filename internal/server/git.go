@@ -55,14 +55,14 @@ type reply struct {
 }
 
 // answer 另起 goroutine 回答，慢的 git 命令不挡读循环，也不挡别的回答
-func (s *Server) answer(ctx context.Context, c *websocket.Conn, data []byte) {
+func (s *Server) answer(ctx context.Context, c *websocket.Conn, key string, data []byte) {
 	go func() {
 		var req request
 		err := json.Unmarshal(data[1:], &req)
 		var res any
 		if err == nil {
 			rctx, cancel := context.WithTimeout(ctx, gitTimeout)
-			res, err = s.handle(rctx, req)
+			res, err = s.handle(rctx, req, key)
 			cancel()
 		}
 		r := reply{Type: "reply", ID: req.ID, Data: res}
@@ -74,12 +74,14 @@ func (s *Server) answer(ctx context.Context, c *websocket.Conn, data []byte) {
 	}()
 }
 
-func (s *Server) handle(ctx context.Context, req request) (any, error) {
+func (s *Server) handle(ctx context.Context, req request, key string) (any, error) {
 	switch req.Op {
 	case "repos":
 		return listRepos(ctx, s.herdr()), nil
 	case "herdr":
 		return s.herdrCall(ctx, req)
+	case "push.subscribe", "push.unsubscribe", "push.test":
+		return s.pushOp(req, key)
 	}
 	op, ok := ops[req.Op]
 	if !ok {

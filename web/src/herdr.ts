@@ -20,8 +20,13 @@ const REQUEST_TIMEOUT = 10_000
 const DELAYS = [1000, 2000, 5000, 10_000]
 const enc = new TextEncoder()
 
-class Watch {
+const READY_WAIT = 8000
+
+export class Watch {
 	state: HerdrState | null = null
+	features: string[] = []
+	private ready = false
+	private waiting = new Set<() => void>()
 	private ws?: WebSocket
 	private tries = 0
 	private timer?: number
@@ -40,7 +45,8 @@ class Watch {
 		if (this.stopped || document.hidden || (this.ws && this.ws.readyState <= WebSocket.OPEN)) return
 		try {
 			const health = await fetch(`${this.host.url}/health`, { signal: AbortSignal.timeout(4000) }).then(r => r.json())
-			if (!health.features?.includes('watch')) return dlog(`${this.host.name} 的 mocod 太旧，看不了 herdr`)
+			this.features = health.features ?? []
+			if (!this.features.includes('watch')) return dlog(`${this.host.name} 的 mocod 太旧，看不了 herdr`)
 		} catch {
 			return this.retry()
 		}
@@ -59,6 +65,10 @@ class Watch {
 				ws.send(JSON.stringify({ type: 'auth', sig: await signChallenge(msg.name, msg.nonce) }))
 			} else if (msg.type === 'ready') {
 				this.tries = 0
+				this.ready = true
+				this.waiting.forEach(fn => fn())
+				this.waiting.clear()
+				readyHooks.forEach(fn => fn(this))
 			} else if (msg.type === 'herdr') {
 				this.state = msg.herdr
 				changed()
@@ -72,6 +82,7 @@ class Watch {
 		ws.onclose = e => {
 			if (this.ws !== ws) return
 			this.ws = undefined
+			this.ready = false
 			this.requests.forEach(r => r.reject(new Error('连接断了')))
 			this.requests.clear()
 			if (e.code === UNAUTHORIZED) this.stopped = true
@@ -91,14 +102,35 @@ class Watch {
 		ws?.close()
 	}
 
+	// 刚打开（点通知进来）时连接还在握手：等它好，最多 READY_WAIT
+	private whenReady() {
+		if (this.ready) return Promise.resolve()
+		return new Promise<void>((resolve, reject) => {
+			const done = () => {
+				clearTimeout(timer)
+				resolve()
+			}
+			const timer = setTimeout(() => {
+				this.waiting.delete(done)
+				reject(new Error('还没连上'))
+			}, READY_WAIT)
+			this.waiting.add(done)
+		})
+	}
+
 	call<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+		return this.request<T>('herdr', { method, params })
+	}
+
+	async request<T = unknown>(op: string, body: Record<string, unknown> = {}): Promise<T> {
+		await this.whenReady()
 		const ws = this.ws
-		if (!ws || ws.readyState !== WebSocket.OPEN) return Promise.reject(new Error('还没连上'))
+		if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error('还没连上')
 		const id = ++this.seq
-		const body = enc.encode(JSON.stringify({ id, op: 'herdr', method, params }))
-		const out = new Uint8Array(body.length + 1)
+		const bytes = enc.encode(JSON.stringify({ id, op, ...body }))
+		const out = new Uint8Array(bytes.length + 1)
 		out[0] = REQUEST
-		out.set(body, 1)
+		out.set(bytes, 1)
 		ws.send(out)
 		return new Promise((resolve, reject) => {
 			this.requests.set(id, { resolve: resolve as (d: unknown) => void, reject })
@@ -115,6 +147,11 @@ class Watch {
 }
 
 const watches = new Map<string, Watch>()
+const readyHooks = new Set<(w: Watch) => void>()
+
+// 每次连上（包括重连）都调：推送用它把订阅交给新加的电脑
+export const onWatchReady = (fn: (w: Watch) => void) => void readyHooks.add(fn)
+export const allWatches = () => [...watches.values()]
 const listeners = new Set<() => void>()
 const changed = () => listeners.forEach(fn => fn())
 

@@ -50,15 +50,17 @@ const (
 )
 
 // features 写在 /health 里，手机看有没有再用：旧版 mocod 不认 watch，会照常开一个终端
-var features = []string{"watch"}
+var features = []string{"watch", "push"}
 
 type Server struct {
 	Cfg         config.Config
 	Version     string
 	Log         *slog.Logger
-	HerdrSocket string // 空就用 herdr 默认的位置；测试里指向假的 herdr
+	HerdrSocket string       // 空就用 herdr 默认的位置；测试里指向假的 herdr
+	PushHTTP    *http.Client // 发推送用的；测试里换成认假推送服务证书的
 
-	hw herdrWatch
+	hw   herdrWatch
+	push pusher
 }
 
 func (s *Server) Handler() http.Handler {
@@ -212,7 +214,7 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.Log.Info("watch open", "remote", r.RemoteAddr)
-		s.Log.Info("watch closed", "remote", r.RemoteAddr, "why", s.watch(r.Context(), c))
+		s.Log.Info("watch closed", "remote", r.RemoteAddr, "why", s.watch(r.Context(), c, hello.Key))
 		return
 	}
 	cols, rows := hello.Cols, hello.Rows
@@ -232,7 +234,7 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	if proto == ProtocolFrames {
 		why = s.pumpFrames(r.Context(), c, sess, hello)
 	} else {
-		why = s.pump(r.Context(), c, sess)
+		why = s.pump(r.Context(), c, sess, hello.Key)
 	}
 	s.Log.Info("session closed", "remote", r.RemoteAddr, "why", why)
 }
@@ -267,7 +269,7 @@ func (s *Server) handshake(ctx context.Context, c *websocket.Conn) (hello messag
 
 // pump 两头对拷，直到一边结束；另起一个心跳，及早发现手机那头已经没了的连接
 // 返回结束的原因，记进日志
-func (s *Server) pump(ctx context.Context, c *websocket.Conn, sess *term.Session) string {
+func (s *Server) pump(ctx context.Context, c *websocket.Conn, sess *term.Session, key string) string {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var once sync.Once
@@ -388,7 +390,7 @@ func (s *Server) pump(ctx context.Context, c *websocket.Conn, sess *term.Session
 		case msgUpload:
 			s.upload(ctx, c, data)
 		case msgRequest:
-			s.answer(ctx, c, data)
+			s.answer(ctx, c, key, data)
 		}
 	}
 }

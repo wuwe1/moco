@@ -70,6 +70,29 @@ func Devices() ([]Device, error) {
 
 func SaveDevices(ds []Device) error { return write("devices.json", ds) }
 
+// PushSub 是一台手机的推送订阅（Web Push）：agent 等人、干完活时 mocod 用它给手机发通知
+type PushSub struct {
+	Key      string `json:"key"`  // 哪台手机（设备公钥）；手机被 revoke 了就不再发
+	Host     string `json:"host"` // 手机上给这台电脑的编号，点开通知时手机按它找电脑
+	Endpoint string `json:"endpoint"`
+	P256dh   string `json:"p256dh"`
+	Auth     string `json:"auth"`
+	// 一个订阅只认一把 VAPID 密钥：手机自己生成一把，交给它连着的每台电脑
+	VAPIDPublic  string `json:"vapidPublic"`
+	VAPIDPrivate string `json:"vapidPrivate"`
+}
+
+func PushSubs() ([]PushSub, error) {
+	var ps []PushSub
+	err := read("push.json", &ps)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	return ps, err
+}
+
+func SavePushSubs(ps []PushSub) error { return write("push.json", ps) }
+
 func LoadPairing() (*Pairing, error) {
 	var p Pairing
 	err := read("pair.json", &p)

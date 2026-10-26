@@ -65,7 +65,7 @@ for (let i = 0; ; i++) {
 const pairCode = () => execFileSync(bin, ['pair'], { env }).toString().match(/(\d{3}) (\d{3})/).slice(1).join('')
 
 const browser = await chromium.launch({ channel: 'chrome' })
-const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, permissions: ['clipboard-read', 'clipboard-write'] })
+const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, permissions: ['clipboard-read', 'clipboard-write', 'notifications'] })
 // 无头 Chrome 弹不出软键盘：换一个 visualViewport，__keyboard(px) 当作键盘占了底下 px 高
 await ctx.addInitScript(() => {
 	const vv = new EventTarget()
@@ -614,6 +614,50 @@ try {
 		await page.click('.host .agents button:has-text("reviewer")')
 		await until(() => page.evaluate(() => !!document.querySelector('#sheet.open')), '打开终端')
 		if ((await lastHerdrCall('agent.focus', '切到 reviewer')).target !== 'w1:p3') throw new Error('切错了')
+	})
+	await check('点通知进来：打开那台电脑、切到那个 agent', async () => {
+		await closeSheet()
+		const id = await page.evaluate(() => JSON.parse(localStorage.getItem('moco.hosts'))[0].id)
+		const n = herdrCalls.length
+		await page.goto(`${base}/?host=${id}&pane=w2:p1`)
+		await until(() => page.evaluate(() => !!document.querySelector('#sheet.open')), '打开终端')
+		await until(() => herdrCalls.length > n, 'agent.focus')
+		if ((await lastHerdrCall('agent.focus', 'agent.focus')).target !== 'w2:p1') throw new Error('切错了')
+		if (page.url().includes('host=')) throw new Error('地址栏里的参数没去掉')
+	})
+	await check('设置页：打开通知，订阅交给 mocod；发一条试试；关掉', async () => {
+		await closeSheet()
+		// 无头 Chrome 连不上真的推送服务：换掉 PushManager，订阅指向一个不存在的地址
+		await page.evaluate(async () => {
+			const b64url = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+			const k = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])
+			const p256dh = b64url(await crypto.subtle.exportKey('raw', k.publicKey))
+			const auth = b64url(crypto.getRandomValues(new Uint8Array(16)))
+			let current = null
+			PushManager.prototype.getSubscription = async () => current
+			PushManager.prototype.subscribe = async opts => (current = {
+				endpoint: 'https://push.invalid/sub/1',
+				options: { applicationServerKey: opts.applicationServerKey.buffer },
+				toJSON: () => ({ keys: { p256dh, auth } }),
+				unsubscribe: async () => ((current = null), true),
+			})
+		})
+		const pushSubs = () => JSON.parse(readFileSync(join(home, 'push.json'), 'utf8'))
+		await page.click('#home [aria-label="设置"]')
+		const note = () => page.locator('#settings [role="switch"][aria-label="agent 的通知"]').locator('xpath=ancestor::*[@data-slot="item"][1]').textContent()
+		await page.click('#settings [role="switch"][aria-label="agent 的通知"]')
+		await until(async () => (await note()).includes('已打开（1 台电脑）'), '打开通知')
+		const subs = pushSubs()
+		const id = await page.evaluate(() => JSON.parse(localStorage.getItem('moco.hosts'))[0].id)
+		if (subs.length !== 1 || subs[0].endpoint !== 'https://push.invalid/sub/1' || subs[0].host !== id || subs[0].vapidPublic.length !== 87 || subs[0].vapidPrivate.length !== 43) throw new Error('mocod 存的订阅 ' + JSON.stringify(subs))
+		await page.click('#settings button:has-text("发一条试试")')
+		await until(async () => /e2e：.*push\.invalid/.test(await note()), '发不出去时说明原因')
+		await page.click('#settings [role="switch"][aria-label="agent 的通知"]')
+		await until(async () => (await note()).includes('已关掉'), '关掉通知')
+		if (pushSubs().length) throw new Error('关掉后 mocod 还留着订阅')
+		await page.click('#settings [aria-label="返回"]')
+		await page.click('.host')
+		await until(() => page.evaluate(() => !!document.querySelector('#sheet.open')), '打开终端')
 	})
 	await check('删掉再配对：旧连接不再听 online', async () => {
 		await closeSheet()

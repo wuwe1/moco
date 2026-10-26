@@ -72,6 +72,7 @@ func serve(args []string) error {
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	s := &server.Server{Cfg: cfg, Version: version, Log: log}
+	s.StartPush()
 	log.Info("mocod listening", "addr", cfg.Listen, "name", cfg.Name, "origins", cfg.Origins, "command", cfg.Command)
 	srv := &http.Server{Addr: cfg.Listen, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	return srv.ListenAndServe()

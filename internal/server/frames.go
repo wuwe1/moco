@@ -33,9 +33,10 @@ import (
 //	手机 → [8][编号 uint32][图片]                 存进 $TMPDIR/moco/
 //	mocod → {type:"uploaded", id, path} 或 {type:"uploaded", id, error}
 //
-// 手机问电脑上的 git 仓库（只读，见 git.go），可以同时问好几个，回答不按顺序：
+// 手机的请求，可以同时问好几个，回答不按顺序：
 //
-//	手机 → [9][JSON {id, op, ...参数}]           op：repos、status、diff、log、commit、tree、file
+//	手机 → [9][JSON {id, op, ...参数}]           op：git 仓库（只读，见 git.go）repos、status、diff、log、commit、tree、file；
+//	                                            herdr（见 herdr.go）；push.subscribe、push.unsubscribe、push.test（见 push.go）
 //	mocod → {type:"reply", id, data} 或 {type:"reply", id, error}
 //
 // 程序复制文字（OSC 52）时，在那一帧之前：
@@ -234,7 +235,7 @@ func (s *Server) pumpFrames(ctx context.Context, c *websocket.Conn, sess *term.S
 		case msgUpload:
 			s.upload(ctx, c, data)
 		case msgRequest:
-			s.answer(ctx, c, data)
+			s.answer(ctx, c, hello.Key, data)
 		case msgAck:
 			select {
 			case acks <- struct{}{}:

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { deviceKey } from './keys'
 import { Ellipsis, Plus, Settings } from 'lucide-react'
 import { byUrgency, StatusDot, STATUS_WORD } from './agents'
@@ -31,6 +31,25 @@ export function App() {
 		open(h)
 		herdrOf(h.id)?.call('agent.focus', { target: pane }).catch(e => dlog(`切到 ${pane} 没成：${e.message}`))
 	}
+	// 点通知进来：冷启动带 ?host=&pane=，已经开着就由 Service Worker 发消息（public/sw.js）
+	const fromNotification = useRef({ open, jump })
+	fromNotification.current = { open, jump }
+	useEffect(() => {
+		const go = (hostId?: string, pane?: string) => {
+			const h = loadHosts().find(x => x.id === hostId)
+			if (!h) return
+			if (pane) fromNotification.current.jump(h, pane)
+			else fromNotification.current.open(h)
+		}
+		const q = new URLSearchParams(location.search)
+		if (q.has('host')) {
+			go(q.get('host')!, q.get('pane') ?? undefined)
+			history.replaceState(null, '', location.pathname)
+		}
+		const onMessage = (e: MessageEvent) => e.data?.type === 'open' && go(e.data.host, e.data.pane)
+		navigator.serviceWorker?.addEventListener('message', onMessage)
+		return () => navigator.serviceWorker?.removeEventListener('message', onMessage)
+	}, [])
 	const remove = (h: Host) => {
 		if (!confirm(`删除 ${h.name}？之后要连它得重新配对。`)) return
 		dropSession(h.id)
