@@ -1,6 +1,7 @@
-const DB = 'moco'
-const STORE = 'keys'
+import { idbStore } from './idb'
+
 const ID = 'device'
+const keys = idbStore<CryptoKeyPair>('moco', 'keys')
 
 const EXTRACTABLE = false
 const authMessage = (name: string, nonce: string) => new TextEncoder().encode(`moco-auth-v1\n${name}\n${nonce}`)
@@ -11,29 +12,12 @@ let cached: Promise<DeviceKey> | undefined
 export const b64url = (b: ArrayBuffer | Uint8Array) =>
 	btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 
-function db(): Promise<IDBDatabase> {
-	return new Promise((resolve, reject) => {
-		const req = indexedDB.open(DB, 1)
-		req.onupgradeneeded = () => req.result.createObjectStore(STORE)
-		req.onsuccess = () => resolve(req.result)
-		req.onerror = () => reject(req.error)
-	})
-}
-
-function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-	return db().then(d => new Promise((resolve, reject) => {
-		const req = fn(d.transaction(STORE, mode).objectStore(STORE))
-		req.onsuccess = () => resolve(req.result)
-		req.onerror = () => reject(req.error)
-	}))
-}
-
 export function deviceKey(): Promise<DeviceKey> {
 	cached ??= (async () => {
-		let pair = await tx<CryptoKeyPair | undefined>('readonly', s => s.get(ID))
+		let pair = await keys.get(ID)
 		if (!pair) {
 			pair = (await crypto.subtle.generateKey({ name: 'Ed25519' }, EXTRACTABLE, ['sign', 'verify'])) as CryptoKeyPair
-			await tx('readwrite', s => s.put(pair, ID))
+			await keys.put(ID, pair)
 		}
 		const pub = b64url(await crypto.subtle.exportKey('raw', pair.publicKey))
 		return { pair, pub }

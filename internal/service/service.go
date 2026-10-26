@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/wuwe1/moco/internal/term"
 )
 
 const label = "com.moco.mocod"
@@ -33,7 +35,7 @@ func Install(bin string) (file string, next []string, err error) {
 	<key>StandardErrorPath</key><string>%s</string>
 </dict>
 </plist>
-`, label, bin, shell(), logf, logf)
+`, label, bin, term.Shell(), logf, logf)
 		next = []string{"launchctl bootstrap gui/$(id -u) " + file}
 		return file, next, writeFile(file, body)
 	case "linux":
@@ -50,18 +52,11 @@ RestartSec=2
 
 [Install]
 WantedBy=default.target
-`, bin, shell())
+`, bin, term.Shell())
 		next = []string{"systemctl --user daemon-reload", "systemctl --user enable --now mocod", "loginctl enable-linger $USER"}
 		return file, next, writeFile(file, body)
 	}
 	return "", nil, fmt.Errorf("unsupported OS %s", runtime.GOOS)
-}
-
-func shell() string {
-	if s := os.Getenv("SHELL"); s != "" {
-		return s
-	}
-	return "/bin/sh"
 }
 
 func writeFile(file, body string) error {

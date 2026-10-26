@@ -229,12 +229,6 @@ func (s *Screen) Resize(cols, rows int) {
 	s.e.Resize(cols, rows)
 }
 
-func (s *Screen) Size() (int, int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.e.Width(), s.e.Height()
-}
-
 // Frame 出一帧：从上一帧到现在的变化。nil 表示没有可发的；
 // 这时 wait > 0 说明程序正画到一半，过 wait 再来问
 func (s *Screen) Frame() (*Frame, time.Duration) {
@@ -325,16 +319,6 @@ func (s *Screen) Frame() (*Frame, time.Duration) {
 		return nil, 0
 	}
 	return f, 0
-}
-
-// Reset 让下一帧整屏重发（手机重连、刚打开时）
-func (s *Screen) Reset() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sentAny = false
-	s.sentModes = map[int]bool{}
-	s.sentImages = map[uint32]bool{}
-	s.dirty = true
 }
 
 func (s *Screen) writeModes(b *bytes.Buffer) bool {

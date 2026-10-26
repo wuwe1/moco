@@ -86,19 +86,6 @@ func TestKittyTransmitPlaceCropDelete(t *testing.T) {
 	}
 }
 
-// 重连（Reset）后图和放置都重发
-func TestKittyResentAfterReset(t *testing.T) {
-	s := New(20, 10, Theme{}, io.Discard)
-	defer s.Close()
-	s.Write([]byte(transmitRGBA(9, 4, 4) + "\x1b_Ga=p,i=9,p=1,c=2,r=1,C=1,q=2\x1b\\"))
-	mustFrame(t, s)
-	s.Reset()
-	f := mustFrame(t, s)
-	if len(f.Images) != 1 || len(f.Placements) != 1 {
-		t.Fatalf("after reset: %+v", f)
-	}
-}
-
 // a=T：传完就放；PNG 原样保留
 func TestKittyTransmitAndDisplayPNG(t *testing.T) {
 	var b bytes.Buffer

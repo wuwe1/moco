@@ -44,9 +44,13 @@ func BenchmarkWriteHerdrLike(b *testing.B) {
 func BenchmarkFrameFullScreen(b *testing.B) {
 	s := New(52, 40, Theme{}, io.Discard)
 	defer s.Close()
-	for b.Loop() {
-		s.Write([]byte("\x1b[H\x1b[2J" + strings.Repeat("\x1b[1;38;2;1;2;3mx\x1b[m中文", 400)))
-		s.Reset()
+	// 两屏轮流画，每一帧每一格都变
+	screens := [2][]byte{}
+	for i, c := range []string{"x", "y"} {
+		screens[i] = []byte("\x1b[H\x1b[2J" + strings.Repeat("\x1b[1;38;2;1;2;3m"+c+"\x1b[m中文", 400))
+	}
+	for i := 0; b.Loop(); i++ {
+		s.Write(screens[i%2])
 		s.Frame()
 	}
 }

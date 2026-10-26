@@ -42,7 +42,7 @@ export const BUILTIN: Theme[] = [
 	t('rose-pine-dawn', 'Rosé Pine Dawn', 'light', '#faf4ed', '#575279', '#f2e9e1 #b4637a #286983 #ea9d34 #56949f #907aa9 #d7827e #575279 #9893a5 #b4637a #286983 #ea9d34 #56949f #907aa9 #d7827e #575279', 'rose-pine-dawn', '#dfdad9'),
 ]
 
-const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i
+const HEX = /^#[0-9a-f]{6}$/i
 
 // 导入的主题：{ v: 1, name, mode: "dark"|"light", colors: { background, foreground, cursor?, selection?, black…brightWhite } }，
 // 十六色也可以写成 colors.ansi 数组；缺的按同一明暗的 Gruvbox 补

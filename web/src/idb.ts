@@ -1,4 +1,4 @@
-// 一个库一张表的 IndexedDB：键值存取。设备密钥另有自己的库（keys.ts），不和它混
+// 一个库一张表的 IndexedDB：键值存取。设备密钥（keys.ts）和导入的字体各用各的库
 export function idbStore<T>(db: string, store: string) {
 	const open = () =>
 		new Promise<IDBDatabase>((resolve, reject) => {
