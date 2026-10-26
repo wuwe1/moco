@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { dlog } from './debug'
-import { deviceKey, signChallenge } from './keys'
+import { MocodSocket, UNAUTHORIZED } from './socket'
 import type { Host } from './store'
 
 // 每台电脑一条只看 herdr 的连接（hello 带 watch:true，mocod 不开终端），首页和终端抽屉都从这里拿 herdr 的状态
@@ -14,37 +14,37 @@ export type HerdrState = {
 	pane: string
 }
 
-const REQUEST = 9
-const UNAUTHORIZED = 4401
-const REQUEST_TIMEOUT = 10_000
 const DELAYS = [1000, 2000, 5000, 10_000]
-const enc = new TextEncoder()
-
-const READY_WAIT = 8000
 
 export class Watch {
 	// undefined：还不知道；null：herdr 没开
 	state: HerdrState | null | undefined
 	tooOld = false
 	features: string[] = []
-	private ready = false
-	private waiting = new Set<() => void>()
-	private ws?: WebSocket
-	private tries = 0
-	private timer?: number
 	private stopped = false
-	private seq = 0
-	private requests = new Map<number, { resolve: (d: unknown) => void; reject: (e: Error) => void }>()
-	private visibility = () => (document.hidden ? this.disconnect() : this.connect())
+	private sock: MocodSocket
+	private visibility = () => (document.hidden ? this.sock.shut() : this.connect())
 
 	constructor(readonly host: Host) {
+		this.sock = new MocodSocket(host, DELAYS, {
+			hello: () => ({ watch: true }),
+			onReady: () => readyHooks.forEach(fn => fn(this)),
+			onMessage: msg => {
+				if (msg.type !== 'herdr') return
+				this.state = msg.herdr as HerdrState | null
+				changed()
+			},
+			onClose: e => {
+				if (e.code === UNAUTHORIZED) this.stopped = true
+				this.retry()
+			},
+		})
 		document.addEventListener('visibilitychange', this.visibility)
 		this.connect()
 	}
 
 	private async connect() {
-		clearTimeout(this.timer)
-		if (this.stopped || document.hidden || (this.ws && this.ws.readyState <= WebSocket.OPEN)) return
+		if (this.stopped || document.hidden || this.sock.active) return
 		try {
 			const health = await fetch(`${this.host.url}/health`, { signal: AbortSignal.timeout(4000) }).then(r => r.json())
 			this.features = health.features ?? []
@@ -56,98 +56,26 @@ export class Watch {
 		} catch {
 			return this.retry()
 		}
-		if (this.stopped || document.hidden || this.ws) return
-		const ws = new WebSocket(this.host.url.replace(/^http/, 'ws') + '/ws', ['moco.v2'])
-		this.ws = ws
-		ws.onopen = async () => {
-			const { pub } = await deviceKey()
-			ws.send(JSON.stringify({ type: 'hello', key: pub, watch: true }))
-		}
-		ws.onmessage = async e => {
-			if (typeof e.data !== 'string') return
-			const msg = JSON.parse(e.data)
-			if (msg.type === 'challenge') {
-				if (msg.name !== this.host.name) return ws.close(4000, 'host mismatch')
-				ws.send(JSON.stringify({ type: 'auth', sig: await signChallenge(msg.name, msg.nonce) }))
-			} else if (msg.type === 'ready') {
-				this.tries = 0
-				this.ready = true
-				this.waiting.forEach(fn => fn())
-				this.waiting.clear()
-				readyHooks.forEach(fn => fn(this))
-			} else if (msg.type === 'herdr') {
-				this.state = msg.herdr
-				changed()
-			} else if (msg.type === 'reply') {
-				const r = this.requests.get(msg.id)
-				this.requests.delete(msg.id)
-				if (msg.error) r?.reject(new Error(msg.error))
-				else r?.resolve(msg.data)
-			}
-		}
-		ws.onclose = e => {
-			if (this.ws !== ws) return
-			this.ws = undefined
-			this.ready = false
-			this.requests.forEach(r => r.reject(new Error('连接断了')))
-			this.requests.clear()
-			if (e.code === UNAUTHORIZED) this.stopped = true
-			this.retry()
-		}
+		if (this.stopped || document.hidden) return
+		this.sock.open()
 	}
 
 	private retry() {
-		if (this.stopped || document.hidden) return
-		this.timer = window.setTimeout(() => this.connect(), DELAYS[Math.min(this.tries++, DELAYS.length - 1)])
-	}
-
-	private disconnect() {
-		clearTimeout(this.timer)
-		const ws = this.ws
-		this.ws = undefined
-		ws?.close()
-	}
-
-	// 刚打开（点通知进来）时连接还在握手：等它好，最多 READY_WAIT
-	private whenReady() {
-		if (this.ready) return Promise.resolve()
-		return new Promise<void>((resolve, reject) => {
-			const done = () => {
-				clearTimeout(timer)
-				resolve()
-			}
-			const timer = setTimeout(() => {
-				this.waiting.delete(done)
-				reject(new Error('还没连上'))
-			}, READY_WAIT)
-			this.waiting.add(done)
-		})
+		if (!this.stopped && !document.hidden) this.sock.retry(() => this.connect())
 	}
 
 	call<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
 		return this.request<T>('herdr', { method, params })
 	}
 
-	async request<T = unknown>(op: string, body: Record<string, unknown> = {}): Promise<T> {
-		await this.whenReady()
-		const ws = this.ws
-		if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error('还没连上')
-		const id = ++this.seq
-		const bytes = enc.encode(JSON.stringify({ id, op, ...body }))
-		const out = new Uint8Array(bytes.length + 1)
-		out[0] = REQUEST
-		out.set(bytes, 1)
-		ws.send(out)
-		return new Promise((resolve, reject) => {
-			this.requests.set(id, { resolve: resolve as (d: unknown) => void, reject })
-			setTimeout(() => this.requests.delete(id) && reject(new Error('mocod 没回答')), REQUEST_TIMEOUT)
-		})
+	request<T = unknown>(op: string, body: Record<string, unknown> = {}): Promise<T> {
+		return this.sock.request<T>(op, body)
 	}
 
 	close() {
 		this.stopped = true
 		document.removeEventListener('visibilitychange', this.visibility)
-		this.disconnect()
+		this.sock.shut()
 		this.state = undefined
 	}
 }
