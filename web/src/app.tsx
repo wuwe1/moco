@@ -134,30 +134,35 @@ function Home(props: {
 			<ul className="hosts">
 				{sorted.map(h => {
 					const live = connOf(h.id)?.state
-					const dot = live === 'open' ? 'open' : health[h.id] === 'online' ? 'online' : health[h.id] === 'offline' ? 'closed' : 'connecting'
+					const dot = live === 'open' || live === 'unauthorized' ? live : health[h.id] === 'online' ? 'online' : health[h.id] === 'offline' ? 'closed' : 'connecting'
 					const screen = loadScreen(h.id)
+					// Tailscale 地址的后缀每台都一样，只留机器名；和名字一样就不写
+					const addr = new URL(h.url).hostname.replace(/\.[^.]+\.ts\.net$/, '')
 					return (
 						<li key={h.id} className="host" onClick={() => props.onOpen(h)}>
 							<div className="thumb">
-								{screen ? <img src={screen.image} alt="" /> : <span className="empty">还没打开过</span>}
-								<WaitingBadge hostId={h.id} />
+								{screen ? <img src={screen.image} alt="" /> : <span className="empty">没打开过</span>}
+								{screen && <span className="age">{ago(screen.at)}</span>}
 							</div>
-							<div className="meta">
-								<span className="dot" data-state={dot} />
-								<span className="name">{h.name}</span>
-								<button
-									className="more"
-									aria-label="删除"
-									onClick={e => {
-										e.stopPropagation()
-										props.onRemove(h)
-									}}
-								>
-									<Ellipsis size={18} />
-								</button>
+							<div className="info">
+								<div className="meta">
+									<span className="dot" data-state={dot} />
+									<span className="name">{h.name}</span>
+									{addr !== h.name && <span className="addr">{addr}</span>}
+									{HOST_WORD[dot] && <span className="state" data-state={dot}>{HOST_WORD[dot]}</span>}
+									<button
+										className="more"
+										aria-label="删除"
+										onClick={e => {
+											e.stopPropagation()
+											props.onRemove(h)
+										}}
+									>
+										<Ellipsis size={18} />
+									</button>
+								</div>
+								{dot !== 'closed' && <AgentList hostId={h.id} onJump={pane => props.onJump(h, pane)} />}
 							</div>
-							<div className="addr">{new URL(h.url).hostname}</div>
-							<AgentList hostId={h.id} onJump={pane => props.onJump(h, pane)} />
 						</li>
 					)
 				})}
@@ -166,35 +171,58 @@ function Home(props: {
 	)
 }
 
-const MAX_AGENTS = 3
+// 在线是常态，只有不在线才写出来
+const HOST_WORD: Record<string, string> = { closed: '离线', connecting: '连接中', unauthorized: '要重新配对' }
 
-function WaitingBadge({ hostId }: { hostId: string }) {
-	const n = useHerdr(hostId)?.agents.filter(a => a.status === 'blocked').length ?? 0
-	return n > 0 ? <span className="waiting">{n > 1 ? `${n} 个等你` : '等你'}</span> : null
+const ago = (t: number) => {
+	const min = Math.floor((Date.now() - t) / 60_000)
+	if (min < 1) return '刚刚'
+	if (min < 60) return `${min} 分钟前`
+	if (min < 24 * 60) return `${Math.floor(min / 60)} 小时前`
+	return `${Math.floor(min / 60 / 24)} 天前`
 }
 
-// 卡片底下各个 agent 在干什么，等你的排前面；点一个直接切到它
+const MAX_AGENTS = 3
+
+// 卡片右边各个 agent 在干什么，等你的排前面；点一个直接切到它。
+// 都叫 claude 分不清，所以带上 workspace 和终端标题（Claude Code 会把标题设成在做的事）
 function AgentList({ hostId, onJump }: { hostId: string; onJump: (pane: string) => void }) {
 	const st = useHerdr(hostId)
-	if (!st?.agents.length) return null
+	if (herdrOf(hostId)?.tooOld) return <p className="agents-note">mocod 太旧，看不到 agent</p>
+	if (st === null) return <p className="agents-note">herdr 没开</p>
+	if (!st) return null
+	if (!st.agents.length) return <p className="agents-note">没有 agent</p>
 	const agents = byUrgency(st.agents)
+	const workspace = (id: string) => {
+		const w = st.workspaces.find(w => w.id === id)
+		return w && (w.label || `workspace ${w.number}`)
+	}
 	return (
 		<ul className="agents">
-			{agents.slice(0, MAX_AGENTS).map(a => (
-				<li key={a.pane}>
-					<button
-						type="button"
-						onClick={e => {
-							e.stopPropagation()
-							onJump(a.pane)
-						}}
-					>
-						<StatusDot status={a.status} />
-						<span className="agent-name">{a.name}</span>
-						<span className="agent-status">{STATUS_WORD[a.status]}</span>
-					</button>
-				</li>
-			))}
+			{agents.slice(0, MAX_AGENTS).map(a => {
+				const where = workspace(a.workspace)
+				return (
+					<li key={a.pane}>
+						<button
+							type="button"
+							onClick={e => {
+								e.stopPropagation()
+								onJump(a.pane)
+							}}
+						>
+							<span className="agent-line">
+								<StatusDot status={a.status} />
+								<span className="agent-name">
+									{where}
+									<span className="agent-kind"> {a.name}</span>
+								</span>
+								<span className="agent-status">{STATUS_WORD[a.status]}</span>
+							</span>
+							{a.title && a.title !== where && <span className="agent-title">{a.title}</span>}
+						</button>
+					</li>
+				)
+			})}
 			{agents.length > MAX_AGENTS && <li className="more-agents">还有 {agents.length - MAX_AGENTS} 个</li>}
 		</ul>
 	)

@@ -23,7 +23,9 @@ const enc = new TextEncoder()
 const READY_WAIT = 8000
 
 export class Watch {
-	state: HerdrState | null = null
+	// undefined：还不知道；null：herdr 没开
+	state: HerdrState | null | undefined
+	tooOld = false
 	features: string[] = []
 	private ready = false
 	private waiting = new Set<() => void>()
@@ -46,7 +48,11 @@ export class Watch {
 		try {
 			const health = await fetch(`${this.host.url}/health`, { signal: AbortSignal.timeout(4000) }).then(r => r.json())
 			this.features = health.features ?? []
-			if (!this.features.includes('watch')) return dlog(`${this.host.name} 的 mocod 太旧，看不了 herdr`)
+			this.tooOld = !this.features.includes('watch')
+			if (this.tooOld) {
+				dlog(`${this.host.name} 的 mocod 太旧，看不了 herdr`)
+				return changed()
+			}
 		} catch {
 			return this.retry()
 		}
@@ -142,7 +148,7 @@ export class Watch {
 		this.stopped = true
 		document.removeEventListener('visibilitychange', this.visibility)
 		this.disconnect()
-		this.state = null
+		this.state = undefined
 	}
 }
 
@@ -170,14 +176,14 @@ export function watchHosts(hosts: Host[]) {
 
 export const herdrOf = (hostId: string | undefined) => (hostId ? watches.get(hostId) : undefined)
 
-export function useHerdr(hostId: string | undefined): HerdrState | null {
+export function useHerdr(hostId: string | undefined): HerdrState | null | undefined {
 	const [, bump] = useState(0)
 	useEffect(() => {
 		const fn = () => bump(n => n + 1)
 		listeners.add(fn)
 		return () => void listeners.delete(fn)
 	}, [])
-	return herdrOf(hostId)?.state ?? null
+	return herdrOf(hostId)?.state
 }
 
 export const agentsIn = (st: HerdrState, tabId: string) => st.agents.filter(a => a.tab === tabId)

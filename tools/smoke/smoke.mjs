@@ -614,7 +614,8 @@ try {
 	await check('首页卡片：agent 状态，点一个直接切过去', async () => {
 		await closeSheet()
 		await until(async () => (await page.locator('.host .agents').textContent().catch(() => '')).includes('reviewer等你'), '卡片上的 agent')
-		if ((await page.locator('.host .waiting').textContent()) !== '等你') throw new Error('缩略图上没有「等你」')
+		const first = () => page.locator('.host .agents button').first().textContent()
+		await until(async () => (await first()) === 'moco reviewer等你审代码', '等你的排第一，带 workspace 和标题')
 		await sleep(500)
 		await shot('home-agents')
 		await page.click('.host .agents button:has-text("reviewer")')
