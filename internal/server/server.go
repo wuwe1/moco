@@ -49,6 +49,9 @@ const (
 	maxFrame   = 256 << 10 // 一帧最多带这么多输出
 )
 
+// features 写在 /health 里，手机看有没有再用：旧版 mocod 不认 watch，会照常开一个终端
+var features = []string{"watch"}
+
 type Server struct {
 	Cfg         config.Config
 	Version     string
@@ -121,7 +124,7 @@ func (s *Server) preflight(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	s.cors(w, r)
-	writeJSON(w, http.StatusOK, map[string]any{"name": s.Cfg.Name, "version": s.Version, "protocol": ProtocolFrames, "protocols": []string{ProtocolFrames, Protocol}})
+	writeJSON(w, http.StatusOK, map[string]any{"name": s.Cfg.Name, "version": s.Version, "protocol": ProtocolFrames, "protocols": []string{ProtocolFrames, Protocol}, "features": features})
 }
 
 func (s *Server) pair(w http.ResponseWriter, r *http.Request) {

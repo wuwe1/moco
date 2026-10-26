@@ -39,6 +39,5 @@
 	opacity: .7;
 }
 
-/* 整页是 touch-action: none、不许选字：这里要能上下左右滑，代码能长按选中复制 */
-.repo-view .scroll { overflow: auto; touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
+/* 整页不许选字：代码能长按选中复制 */
 .repo-view .selectable { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }

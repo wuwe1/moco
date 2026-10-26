@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { deviceKey } from './keys'
 import { Ellipsis, Plus, Settings } from 'lucide-react'
+import { byUrgency, StatusDot, STATUS_WORD } from './agents'
+import { dlog } from './debug'
+import { herdrOf, useHerdr, watchHosts } from './herdr'
 import { connOf, dropSession, useRerenderOnSessionChange } from './session'
 import { SettingsPage } from './settings'
 import { Sheet } from './sheet'
@@ -14,6 +17,7 @@ export function App() {
 	const [active, setActive] = useState<Host>()
 	const [adding, setAdding] = useState<{ url?: string } | undefined>(hosts.length ? undefined : {})
 	const [settings, setSettings] = useState(false)
+	useEffect(() => watchHosts(hosts), [hosts])
 
 	const update = (next: Host[]) => {
 		saveHosts(next)
@@ -22,6 +26,10 @@ export function App() {
 	const open = (h: Host) => {
 		update(hosts.map(x => (x.id === h.id ? { ...x, lastUsed: Date.now() } : x)))
 		setActive(h)
+	}
+	const jump = (h: Host, pane: string) => {
+		open(h)
+		herdrOf(h.id)?.call('agent.focus', { target: pane }).catch(e => dlog(`切到 ${pane} 没成：${e.message}`))
 	}
 	const remove = (h: Host) => {
 		if (!confirm(`删除 ${h.name}？之后要连它得重新配对。`)) return
@@ -39,7 +47,7 @@ export function App() {
 
 	return (
 		<>
-			<Home hosts={hosts} onOpen={open} onAdd={() => setAdding({})} onRemove={remove} onSettings={() => setSettings(true)} hidden={!!adding || settings} />
+			<Home hosts={hosts} onOpen={open} onJump={jump} onAdd={() => setAdding({})} onRemove={remove} onSettings={() => setSettings(true)} hidden={!!adding || settings} />
 			{settings && <SettingsPage onBack={() => setSettings(false)} />}
 			{adding && <Add initialUrl={adding.url} canCancel={hosts.length > 0} onCancel={() => setAdding(undefined)} onAdded={addReplacingSameUrl} />}
 			<Sheet
@@ -81,6 +89,7 @@ function Home(props: {
 	hosts: Host[]
 	hidden: boolean
 	onOpen: (h: Host) => void
+	onJump: (h: Host, pane: string) => void
 	onAdd: () => void
 	onRemove: (h: Host) => void
 	onSettings: () => void
@@ -110,7 +119,10 @@ function Home(props: {
 					const screen = loadScreen(h.id)
 					return (
 						<li key={h.id} className="host" onClick={() => props.onOpen(h)}>
-							<div className="thumb">{screen ? <img src={screen.image} alt="" /> : <span className="empty">还没打开过</span>}</div>
+							<div className="thumb">
+								{screen ? <img src={screen.image} alt="" /> : <span className="empty">还没打开过</span>}
+								<WaitingBadge hostId={h.id} />
+							</div>
 							<div className="meta">
 								<span className="dot" data-state={dot} />
 								<span className="name">{h.name}</span>
@@ -126,11 +138,46 @@ function Home(props: {
 								</button>
 							</div>
 							<div className="addr">{new URL(h.url).hostname}</div>
+							<AgentList hostId={h.id} onJump={pane => props.onJump(h, pane)} />
 						</li>
 					)
 				})}
 			</ul>
 		</main>
+	)
+}
+
+const MAX_AGENTS = 3
+
+function WaitingBadge({ hostId }: { hostId: string }) {
+	const n = useHerdr(hostId)?.agents.filter(a => a.status === 'blocked').length ?? 0
+	return n > 0 ? <span className="waiting">{n > 1 ? `${n} 个等你` : '等你'}</span> : null
+}
+
+// 卡片底下各个 agent 在干什么，等你的排前面；点一个直接切到它
+function AgentList({ hostId, onJump }: { hostId: string; onJump: (pane: string) => void }) {
+	const st = useHerdr(hostId)
+	if (!st?.agents.length) return null
+	const agents = byUrgency(st.agents)
+	return (
+		<ul className="agents">
+			{agents.slice(0, MAX_AGENTS).map(a => (
+				<li key={a.pane}>
+					<button
+						type="button"
+						onClick={e => {
+							e.stopPropagation()
+							onJump(a.pane)
+						}}
+					>
+						<StatusDot status={a.status} />
+						<span className="agent-name">{a.name}</span>
+						<span className="agent-status">{STATUS_WORD[a.status]}</span>
+					</button>
+				</li>
+			))}
+			{agents.length > MAX_AGENTS && <li className="more-agents">还有 {agents.length - MAX_AGENTS} 个</li>}
+		</ul>
 	)
 }
 

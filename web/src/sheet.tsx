@@ -2,7 +2,9 @@ import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type P
 import { writeClipboard } from './clipboard'
 import type { Conn, State } from './conn'
 import { debugLines, dlog, onDebug } from './debug'
-import { ArrowUp, FolderGit2, Keyboard, KeyboardOff } from 'lucide-react'
+import { ArrowUp, FolderGit2, Keyboard, KeyboardOff, PanelsTopLeft } from 'lucide-react'
+import { useHerdr } from './herdr'
+import { HerdrPanel } from './herdr-panel'
 import { KEYS, keyboard } from './keyboard'
 import { Lightbox, type Picture } from './lightbox'
 import { shrinkImage } from './shrink'
@@ -41,6 +43,8 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	const [debug, setDebug] = useState(false)
 	const [picture, setPicture] = useState<Picture>()
 	const [repoOpen, setRepoOpen] = useState(false)
+	const [herdrOpen, setHerdrOpen] = useState(false)
+	const herdr = useHerdr(host?.id)
 	const [pasting, setPasting] = useState(false)
 	const [typing, setTyping] = useState(false)
 	const [toast, setToast] = useState<Toast>()
@@ -88,6 +92,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		const prev = current.current
 		if (prev && prev.host.id !== host?.id) prev.detach()
 		setRepoOpen(false)
+		setHerdrOpen(false)
 		if (!host) {
 			kb.current?.blur()
 			current.current = undefined
@@ -181,6 +186,19 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 				<span className="dot" data-state={state} />
 				<span className="title">{host?.name}</span>
 				<span className="status">{status(state, conn)}</span>
+				{herdr && (
+					<button
+						className="herdr"
+						aria-label="herdr"
+						data-waiting={herdr.agents.some(a => a.status === 'blocked' && a.tab !== herdr.tab) || undefined}
+						onClick={() => {
+							kb.current?.blur()
+							setHerdrOpen(true)
+						}}
+					>
+						<PanelsTopLeft size={18} />
+					</button>
+				)}
 				<button
 					className="repo"
 					aria-label="仓库"
@@ -265,6 +283,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 					<RepoView conn={conn} hostId={host.id} onClose={() => setRepoOpen(false)} />
 				</Suspense>
 			)}
+			{host && <HerdrPanel hostId={host.id} open={herdrOpen} onOpenChange={setHerdrOpen} onError={msg => flash(msg)} />}
 			{picture && <Lightbox img={picture} onClose={() => setPicture(undefined)} />}
 		</div>
 	)

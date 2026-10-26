@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process'
+import { createServer } from 'node:net'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,7 +15,42 @@ writeFileSync(join(home, 'config.json'), JSON.stringify({
 	name: 'e2e', listen: `127.0.0.1:${port}`, web: join(repo, 'web/dist'),
 	command: ['bash', '--norc', '--noprofile'], origins: ['127.0.0.1'],
 }))
-const env = { ...process.env, MOCOD_HOME: home }
+// 假 herdr：按 herdr 的 socket 格式回答快照，记下切 tab 这类调用
+const herdr = {
+	focused_workspace_id: 'w1', focused_tab_id: 'w1:t1', focused_pane_id: 'w1:p1',
+	workspaces: [
+		{ workspace_id: 'w1', label: 'moco', number: 1, agent_status: 'blocked', focused: true },
+		{ workspace_id: 'w2', label: 'cobot', number: 2, agent_status: 'done', focused: false },
+	],
+	tabs: [
+		{ tab_id: 'w1:t1', workspace_id: 'w1', label: '1', number: 1, agent_status: 'working', focused: true, pane_count: 2 },
+		{ tab_id: 'w1:t2', workspace_id: 'w1', label: '2', number: 2, agent_status: 'blocked', focused: false, pane_count: 1 },
+		{ tab_id: 'w2:t1', workspace_id: 'w2', label: '1', number: 1, agent_status: 'done', focused: false, pane_count: 1 },
+	],
+	layouts: [],
+	agents: [
+		{ pane_id: 'w1:p1', tab_id: 'w1:t1', workspace_id: 'w1', agent: 'claude', agent_status: 'working', terminal_title_stripped: '修 bug', cwd: '/x', focused: true },
+		{ pane_id: 'w1:p3', tab_id: 'w1:t2', workspace_id: 'w1', agent: 'claude', name: 'reviewer', agent_status: 'blocked', terminal_title_stripped: '审代码', cwd: '/x', focused: false },
+		{ pane_id: 'w2:p1', tab_id: 'w2:t1', workspace_id: 'w2', agent: 'pi', agent_status: 'done', terminal_title_stripped: 'cobot', cwd: '/y', focused: false },
+	],
+}
+const herdrCalls = []
+const herdrSock = join(home, 'h.sock')
+const herdrServer = createServer(c => {
+	let buf = ''
+	c.on('data', d => {
+		buf += d
+		const i = buf.indexOf('\n')
+		if (i < 0) return
+		const req = JSON.parse(buf.slice(0, i))
+		let result = { type: 'ok' }
+		if (req.method === 'session.snapshot') result = { type: 'session_snapshot', snapshot: herdr }
+		else if (req.method === 'agent.list') result = { type: 'agent_list', agents: herdr.agents }
+		else herdrCalls.push(req)
+		c.end(JSON.stringify({ id: req.id, result }) + '\n')
+	})
+}).listen(herdrSock)
+const env = { ...process.env, MOCOD_HOME: home, HERDR_SOCKET_PATH: herdrSock }
 const mocod = spawn(bin, ['serve'], { env, stdio: ['ignore', 'ignore', 'pipe'] })
 let mocodLog = ''
 mocod.stderr.on('data', d => (mocodLog += d))
@@ -533,6 +569,52 @@ try {
 		await page.click('.repo-view header [aria-label="关闭"]')
 		await until(async () => !(await page.locator('.repo-view').count()), '关掉仓库面板')
 	})
+	const lastHerdrCall = async (method, what) => {
+		await until(() => herdrCalls.at(-1)?.method === method, what)
+		return herdrCalls.at(-1).params
+	}
+	await check('herdr 面板：快捷操作、按编号切、跳到别的 tab', async () => {
+		await until(() => page.locator('#grab .herdr[data-waiting]').count(), 'herdr 键带「等你」的红点')
+		const open = async () => {
+			await page.click('#grab .herdr')
+			await until(() => page.locator('.herdr-panel [data-tab]').count(), 'herdr 面板')
+			await sleep(400)
+		}
+		await open()
+		await shot('herdr-panel')
+		const text = await page.locator('.herdr-panel').textContent()
+		for (const want of ['moco', 'cobot', '修 bug', '审代码', 'reviewer 等你', 'pi 干完了']) if (!text.includes(want)) throw new Error('面板里没有 ' + want)
+		await page.click('.herdr-panel [aria-label="下一个 tab"]')
+		if ((await lastHerdrCall('tab.focus', '下一个 tab')).tab_id !== 'w1:t2') throw new Error('下一个 tab 切错了')
+
+		await open()
+		await page.click('.herdr-panel [aria-label="切到第几个 tab"] button:has-text("2")')
+		if ((await lastHerdrCall('tab.focus', '按编号切')).tab_id !== 'w1:t2') throw new Error('按编号切错了')
+
+		await open()
+		await page.click('.herdr-panel button:has-text("新 tab")')
+		const created = await lastHerdrCall('tab.create', '新 tab')
+		if (created.workspace_id !== 'w1' || !created.focus) throw new Error('新 tab 的参数 ' + JSON.stringify(created))
+
+		await open()
+		await page.click('.herdr-panel [aria-label="放大窗格"]')
+		await lastHerdrCall('pane.zoom', '放大')
+
+		await open()
+		await page.click('.herdr-panel [data-tab="w2:t1"]')
+		if ((await lastHerdrCall('agent.focus', '跳到有 agent 的 tab')).target !== 'w2:p1') throw new Error('跳错了')
+		await until(async () => !(await page.locator('.herdr-panel').count()), '面板收起')
+	})
+	await check('首页卡片：agent 状态，点一个直接切过去', async () => {
+		await closeSheet()
+		await until(async () => (await page.locator('.host .agents').textContent().catch(() => '')).includes('reviewer等你'), '卡片上的 agent')
+		if ((await page.locator('.host .waiting').textContent()) !== '等你') throw new Error('缩略图上没有「等你」')
+		await sleep(500)
+		await shot('home-agents')
+		await page.click('.host .agents button:has-text("reviewer")')
+		await until(() => page.evaluate(() => !!document.querySelector('#sheet.open')), '打开终端')
+		if ((await lastHerdrCall('agent.focus', '切到 reviewer')).target !== 'w1:p3') throw new Error('切错了')
+	})
 	await check('删掉再配对：旧连接不再听 online', async () => {
 		await closeSheet()
 		page.once('dialog', d => d.accept())
@@ -568,4 +650,5 @@ try {
 } finally {
 	await browser.close()
 	mocod.kill()
+	herdrServer.close()
 }
