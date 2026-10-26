@@ -20,7 +20,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
-	"github.com/wuwe1/moco/internal/term"
+	"github.com/wuwe1/moco/internal/herdr"
 )
 
 const (
@@ -42,6 +42,9 @@ type request struct {
 	Untracked bool   `json:"untracked"`
 	N         int    `json:"n"`
 	Skip      int    `json:"skip"`
+
+	Method string          `json:"method"` // op "herdr"
+	Params json.RawMessage `json:"params"`
 }
 
 type reply struct {
@@ -59,7 +62,7 @@ func (s *Server) answer(ctx context.Context, c *websocket.Conn, data []byte) {
 		var res any
 		if err == nil {
 			rctx, cancel := context.WithTimeout(ctx, gitTimeout)
-			res, err = handle(rctx, req)
+			res, err = s.handle(rctx, req)
 			cancel()
 		}
 		r := reply{Type: "reply", ID: req.ID, Data: res}
@@ -71,9 +74,12 @@ func (s *Server) answer(ctx context.Context, c *websocket.Conn, data []byte) {
 	}()
 }
 
-func handle(ctx context.Context, req request) (any, error) {
-	if req.Op == "repos" {
-		return listRepos(ctx), nil
+func (s *Server) handle(ctx context.Context, req request) (any, error) {
+	switch req.Op {
+	case "repos":
+		return listRepos(ctx, s.herdr()), nil
+	case "herdr":
+		return s.herdrCall(ctx, req)
 	}
 	op, ok := ops[req.Op]
 	if !ok {
@@ -252,35 +258,23 @@ type repoInfo struct {
 	Agents []agentInfo `json:"agents"`
 }
 
-// herdrAgentList 经登录 shell 跑：mocod 的 PATH 里不一定有 ~/.local/bin。测试里换掉
-var herdrAgentList = func(ctx context.Context) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, term.Shell(), "-lc", "herdr agent list")
-	if home, err := os.UserHomeDir(); err == nil {
-		cmd.Dir = home
-	}
-	return cmd.Output()
-}
-
 // listRepos 找 herdr 里每个 agent 所在的仓库；herdr 不在或出错就是空列表
-func listRepos(ctx context.Context) map[string][]repoInfo {
+func listRepos(ctx context.Context, h herdr.Client) map[string][]repoInfo {
 	repos := []repoInfo{}
-	out, err := herdrAgentList(ctx)
+	out, err := h.Call(ctx, "agent.list", nil)
 	var list struct {
-		Result struct {
-			Agents []struct {
-				Agent  string `json:"agent"`
-				Status string `json:"agent_status"`
-				Cwd    string `json:"cwd"`
-			} `json:"agents"`
-		} `json:"result"`
+		Agents []struct {
+			Agent  string `json:"agent"`
+			Status string `json:"agent_status"`
+			Cwd    string `json:"cwd"`
+		} `json:"agents"`
 	}
-	// 登录 shell 的启动文件可能先打印别的东西
-	if i := bytes.IndexByte(out, '{'); err != nil || i < 0 || json.NewDecoder(bytes.NewReader(out[i:])).Decode(&list) != nil {
+	if err != nil || json.Unmarshal(out, &list) != nil {
 		return map[string][]repoInfo{"repos": repos}
 	}
 	tops := map[string]string{}
 	index := map[string]int{}
-	for _, a := range list.Result.Agents {
+	for _, a := range list.Agents {
 		if !filepath.IsAbs(a.Cwd) {
 			continue
 		}

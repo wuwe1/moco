@@ -49,6 +49,11 @@ func (l *logBuf) String() string {
 
 func setupCmd(t *testing.T, command ...string) (*httptest.Server, string, ed25519.PrivateKey, *logBuf) {
 	t.Helper()
+	return setupWith(t, func(*Server) {}, command...)
+}
+
+func setupWith(t *testing.T, tweak func(*Server), command ...string) (*httptest.Server, string, ed25519.PrivateKey, *logBuf) {
+	t.Helper()
 	t.Setenv("MOCOD_HOME", t.TempDir())
 	t.Setenv("SHELL", "/bin/sh")
 	pub, priv, _ := ed25519.GenerateKey(nil)
@@ -63,6 +68,7 @@ func setupCmd(t *testing.T, command ...string) (*httptest.Server, string, ed2551
 		Version: "test",
 		Log:     slog.New(slog.NewTextHandler(logs, nil)),
 	}
+	tweak(s)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
 	return ts, key, priv, logs

@@ -9,10 +9,11 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/coder/websocket"
+
+	"github.com/wuwe1/moco/internal/herdr/herdrtest"
 )
 
 type rawReply struct {
@@ -269,25 +270,19 @@ func TestGitRequests(t *testing.T) {
 func TestGitRepos(t *testing.T) {
 	repo := gitRepo(t)
 	notRepo := t.TempDir()
-	agents, _ := json.Marshal(map[string]any{"result": map[string]any{"agents": []map[string]any{
+	h := herdrtest.Start(t)
+	var snap any
+	raw, _ := json.Marshal(map[string]any{"agents": []map[string]any{
 		{"agent": "claude", "agent_status": "working", "cwd": repo},
 		{"agent": "pi", "agent_status": "done", "cwd": filepath.Join(repo, "sub")},
 		{"agent": "codex", "agent_status": "idle", "cwd": notRepo},
 		{"agent": "pi", "agent_status": "idle", "cwd": ""},
-	}}})
-	out := append([]byte("motd from .zprofile\n"), agents...)
-	var canned atomic.Pointer[[]byte]
-	canned.Store(&out)
-	old := herdrAgentList
-	herdrAgentList = func(context.Context) ([]byte, error) {
-		if p := canned.Load(); p != nil {
-			return *p, nil
-		}
-		return nil, exec.ErrNotFound
-	}
-	t.Cleanup(func() { herdrAgentList = old })
+	}})
+	json.Unmarshal(raw, &snap)
+	h.SetSnapshot(snap)
+	herdrPath := h.Path
 
-	ts, key, priv, _ := setupCmd(t, "cat")
+	ts, key, priv, _ := setupWith(t, func(s *Server) { s.HerdrSocket = herdrPath }, "cat")
 	c, ctx := dialFrames(t, ts, key, priv)
 	var res struct{ Repos []repoInfo }
 	ask(t, ctx, c, "repos", nil, &res)
@@ -308,7 +303,8 @@ func TestGitRepos(t *testing.T) {
 	}
 
 	// 没装 herdr：空列表，不是错误
-	canned.Store(nil)
+	ts, key, priv, _ = setupWith(t, func(s *Server) { s.HerdrSocket = herdrPath + ".missing" }, "cat")
+	c, ctx = dialFrames(t, ts, key, priv)
 	res.Repos = nil
 	ask(t, ctx, c, "repos", nil, &res)
 	if res.Repos == nil || len(res.Repos) != 0 {

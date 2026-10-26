@@ -50,9 +50,12 @@ const (
 )
 
 type Server struct {
-	Cfg     config.Config
-	Version string
-	Log     *slog.Logger
+	Cfg         config.Config
+	Version     string
+	Log         *slog.Logger
+	HerdrSocket string // 空就用 herdr 默认的位置；测试里指向假的 herdr
+
+	hw herdrWatch
 }
 
 func (s *Server) Handler() http.Handler {
@@ -153,6 +156,7 @@ type message struct {
 	Cols  uint16 `json:"cols,omitempty"`
 	Rows  uint16 `json:"rows,omitempty"`
 	Code  *int   `json:"code,omitempty"`
+	Watch bool   `json:"watch,omitempty"` // 只看 herdr、不开终端（herdr.go）
 	ID    uint32 `json:"id,omitempty"`
 	Path  string `json:"path,omitempty"`
 	Error string `json:"error,omitempty"`
@@ -200,6 +204,14 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	}
 	c.SetReadLimit(maxUpload + 5)
 	go auth.Touch(hello.Key)
+	if hello.Watch {
+		if err := wsjson.Write(r.Context(), c, message{Type: "ready", Name: s.Cfg.Name}); err != nil {
+			return
+		}
+		s.Log.Info("watch open", "remote", r.RemoteAddr)
+		s.Log.Info("watch closed", "remote", r.RemoteAddr, "why", s.watch(r.Context(), c))
+		return
+	}
 	cols, rows := hello.Cols, hello.Rows
 
 	sess, err := term.Start(s.Cfg.Command, cols, rows)
