@@ -93,11 +93,16 @@ func TestWatchHerdr(t *testing.T) {
 	if len(calls) != 1 || calls[0].Method != "tab.focus" || !strings.Contains(string(calls[0].Params), `"w1:t1"`) {
 		t.Fatalf("herdr calls: %+v", calls)
 	}
+	// 旧页面的 agent.focus 换成 pane.focus：herdr 只在 pane.focus 之后让客户端跟过去
+	ask(t, ctx, c, "herdr", map[string]any{"method": "agent.focus", "params": map[string]string{"target": "w1:p2"}}, &out)
+	if calls := h.Calls(); len(calls) != 2 || calls[1].Method != "pane.focus" || string(calls[1].Params) != `{"pane_id":"w1:p2"}` {
+		t.Fatalf("old agent.focus: %+v", calls)
+	}
 	sendRequest(ctx, c, 2, "herdr", map[string]any{"method": "server.stop"})
 	if r := readReply(t, ctx, c); r.Error == "" {
 		t.Fatalf("server.stop allowed: %+v", r)
 	}
-	if len(h.Calls()) != 1 {
+	if len(h.Calls()) != 2 {
 		t.Fatal("disallowed method reached herdr")
 	}
 	if _, err := os.Stat(marker); err == nil {

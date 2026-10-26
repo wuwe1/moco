@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -45,6 +46,14 @@ func (s *Server) herdrWatcher() *herdr.Watcher {
 }
 
 func (s *Server) herdrCall(ctx context.Context, req request) (any, error) {
+	// 手机上还开着的旧页面发 agent.focus {target: 窗格}：照新页面的做法换成 pane.focus
+	if req.Method == "agent.focus" {
+		var old struct{ Target string }
+		if json.Unmarshal(req.Params, &old) == nil && old.Target != "" {
+			req.Method = "pane.focus"
+			req.Params, _ = json.Marshal(map[string]string{"pane_id": old.Target})
+		}
+	}
 	if !herdrMethods[req.Method] {
 		return nil, fmt.Errorf("herdr method %q not allowed", req.Method)
 	}
