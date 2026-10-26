@@ -1,4 +1,5 @@
 import type { Terminal } from '@xterm/xterm'
+import { dlog } from './debug'
 import { grid } from './grid'
 import { FONT_MAX, FONT_MIN } from './store'
 
@@ -23,12 +24,12 @@ export function gestures(el: HTMLElement, term: Terminal, opts: Opts) {
 	let acc = 0
 	let upwardPxPerMs = 0
 	let moved = 0
-	let startT = 0
 	let x = 0
 	let y = 0
 	let pinchDist = 0
 	let pinchFont = 0
 	let raf = 0
+	let logged = false
 
 	let queued = 0
 	let flushing = 0
@@ -63,6 +64,11 @@ export function gestures(el: HTMLElement, term: Terminal, opts: Opts) {
 		const lines = Math.trunc(acc / h)
 		if (lines) {
 			acc -= lines * h
+			if (!logged) {
+				logged = true
+				const top = el.getBoundingClientRect().top
+				dlog(`终端滑动：从 y=${Math.round(y)} 开始（终端顶 ${Math.round(top)}），鼠标上报 ${term.modes.mouseTrackingMode}，${term.buffer.active.type === 'alternate' ? '全屏' : '普通'}屏幕`)
+			}
 			opts.onScroll()
 			wheel(lines)
 		}
@@ -104,8 +110,9 @@ export function gestures(el: HTMLElement, term: Terminal, opts: Opts) {
 		mode = 'scroll'
 		x = t.clientX
 		y = lastY = t.clientY
-		startT = lastT = e.timeStamp
+		lastT = e.timeStamp
 		acc = upwardPxPerMs = moved = 0
+		logged = false
 		holdTimer = window.setTimeout(() => {
 			mode = 'hold'
 			opts.onHold(x, y)
@@ -135,7 +142,8 @@ export function gestures(el: HTMLElement, term: Terminal, opts: Opts) {
 		if (e.touches.length) return
 		clearTimeout(holdTimer)
 		if (mode === 'scroll') {
-			if (moved < 8 && e.timeStamp - startT < 300) opts.onTap(x, y)
+			// 没挪动、长按还没触发就算轻点，不管按了多久：认真点列表时常按 300ms 以上
+			if (moved < HOLD_SLOP_PX) opts.onTap(x, y)
 			else if (e.timeStamp - lastT < 80 && Math.abs(upwardPxPerMs) > 0.3) glide()
 		}
 		mode = 'none'

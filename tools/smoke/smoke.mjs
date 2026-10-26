@@ -324,6 +324,12 @@ try {
 		await page.touchscreen.tap(box.x + box.width - 20, box.y + box.height - 20)
 		await until(() => page.evaluate(() => document.activeElement?.id === 'input'), '输入框拿到焦点')
 	})
+	await check('按得久一点（380ms，还没到长按）也算轻点', async () => {
+		await page.evaluate(() => document.activeElement?.blur())
+		const box = await page.locator('.pane:not([hidden])').boundingBox()
+		await touch({ x: box.x + box.width - 20, y: box.y + box.height - 20 }, { holdMs: 380 })
+		await until(() => page.evaluate(() => document.activeElement?.id === 'input'), '输入框拿到焦点')
+	})
 	await check('单指上划：less 往下翻', async () => {
 		await page.focus('#input')
 		await page.keyboard.type('seq 1 200 | less')

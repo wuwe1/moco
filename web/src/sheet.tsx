@@ -147,6 +147,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	const down = (e: ReactPointerEvent) => {
 		if ((e.target as HTMLElement).closest('button')) return
 		grab.current = { y: e.clientY, t: e.timeStamp, active: true, onStatus: !!(e.target as HTMLElement).closest('.status') }
+		dlog(`按住把手：y=${Math.round(e.clientY)}`)
 		;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
 	}
 	const move = (e: ReactPointerEvent) => {
@@ -157,6 +158,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		grab.current.active = false
 		const dy = e.clientY - grab.current.y
 		const v = dy / Math.max(1, e.timeStamp - grab.current.t)
+		dlog(`松开把手：往下 ${Math.round(dy)}px（${e.type}）`)
 		setDrag(0)
 		if (Math.abs(dy) < TAP_SLOP_PX && grab.current.onStatus) {
 			const s = current.current

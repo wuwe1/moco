@@ -187,6 +187,7 @@ export class Session {
 		}
 		mouse.triggerMouseEvent({ ...at, action: 1 })
 		mouse.triggerMouseEvent({ ...at, action: 0 })
+		dlog(`轻点第 ${p.row + 1} 行第 ${p.col + 1} 列，发给程序（鼠标上报 ${this.term.modes.mouseTrackingMode}）`)
 		return true
 	}
 
