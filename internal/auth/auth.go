@@ -81,11 +81,11 @@ func Touch(key string) {
 	if err != nil {
 		return
 	}
-	for i := range ds {
-		if ds[i].Key == key {
-			ds[i].LastSeen = time.Now()
-		}
+	i := slices.IndexFunc(ds, func(d config.Device) bool { return d.Key == key })
+	if i < 0 {
+		return
 	}
+	ds[i].LastSeen = time.Now()
 	config.SaveDevices(ds)
 }
 

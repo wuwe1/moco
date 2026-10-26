@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +20,19 @@ import (
 	"github.com/wuwe1/moco/internal/auth"
 	"github.com/wuwe1/moco/internal/config"
 )
+
+// 整个包的测试都在一个临时的 MOCOD_HOME 里跑。每个测试的 t.Setenv 结束时还原成它，而不是用户真的 ~/.config/mocod：
+// 测试结束后还没跑完的协程（比如连上时记最后连接时间的 auth.Touch）不会写坏用户的设备名单
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "mocod-test")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("MOCOD_HOME", dir)
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
 
 var b64 = base64.RawURLEncoding
 

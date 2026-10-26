@@ -127,14 +127,15 @@ func read(name string, v any) error {
 }
 
 func write(name string, v any) error {
-	if err := os.MkdirAll(Dir(), 0o700); err != nil {
+	dir := Dir() // 只取一次：临时文件和改名后的文件必须在同一个目录
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(Dir(), name+".*")
+	tmp, err := os.CreateTemp(dir, name+".*")
 	if err != nil {
 		return err
 	}
@@ -150,5 +151,5 @@ func write(name string, v any) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), path(name))
+	return os.Rename(tmp.Name(), filepath.Join(dir, name))
 }
