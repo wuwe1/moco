@@ -7,7 +7,8 @@ import { Drawer as DrawerPrimitive } from "vaul"
 function Drawer({
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
-  return <DrawerPrimitive.Root data-slot="drawer" {...props} />
+  // 只有顶上的把手能拖：vaul 默认在内容里每次按下都 setPointerCapture，iOS 上里面的按钮就收不到 click
+  return <DrawerPrimitive.Root data-slot="drawer" handleOnly {...props} />
 }
 
 function DrawerTrigger({
@@ -64,7 +65,8 @@ function DrawerContent({
         )}
         {...props}
       >
-        <div className="mx-auto mt-4 hidden h-2 w-[100px] shrink-0 rounded-full bg-muted group-data-[vaul-drawer-direction=bottom]/drawer-content:block" />
+        {/* vaul 给把手塞了不分层的样式（浅灰、32×5），压过 Tailwind 的，这里加 ! */}
+        <DrawerPrimitive.Handle className="mx-auto mt-4 h-2! w-[100px]! shrink-0 rounded-full bg-muted! opacity-100!" />
         {children}
       </DrawerPrimitive.Content>
     </DrawerPortal>

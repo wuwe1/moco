@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { byUrgency, StatusDot, STATUS_WORD } from './agents'
+import { dlog } from './debug'
 import { agentsIn, herdrOf, tabsOfFocused, useHerdr, type HerdrState } from './herdr'
 
 type Tab = HerdrState['tabs'][number]
@@ -11,6 +12,7 @@ type Tab = HerdrState['tabs'][number]
 export function HerdrPanel(props: { hostId: string; open: boolean; onOpenChange: (o: boolean) => void; onError: (msg: string) => void }) {
 	const st = useHerdr(props.hostId)
 	const call = (method: string, params: Record<string, unknown> = {}) => {
+		dlog(`herdr 面板：${method} ${JSON.stringify(params)}`)
 		props.onOpenChange(false)
 		herdrOf(props.hostId)
 			?.call(method, params)
