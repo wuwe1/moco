@@ -254,17 +254,19 @@ code { font: 13px var(--mono); color: var(--fg); }
 :where(#home, #add, #sheet, .lightbox) input[inputmode="numeric"] { font-family: var(--mono); letter-spacing: .15em; }
 .error { margin: 0; color: var(--down); font-size: 14px; }
 
+/* 抽屉顶上让出状态栏再多 --peek，露出后面缩小的首页，像 iOS 的卡片抽屉 */
 #sheet {
+	--peek: 10px;
+	--top: calc(env(safe-area-inset-top) + var(--peek));
 	position: fixed;
 	left: 0;
 	right: 0;
-	top: var(--vv-top, 0);
-	height: 100dvh;
+	top: calc(var(--vv-top, 0px) + var(--top));
+	height: calc(var(--vv-h, 100dvh) - var(--top));
 	z-index: 10;
 	display: flex;
 	flex-direction: column;
-	padding-top: env(safe-area-inset-top);
-	box-sizing: border-box;
+	border-radius: 12px 12px 0 0;
 	background: var(--term);
 	transform: translateY(100%);
 	visibility: hidden;
@@ -277,6 +279,13 @@ code { font: 13px var(--mono); color: var(--fg); }
 	transition: transform .38s var(--ease);
 }
 #sheet.dragging { transition: none; }
+body:has(#sheet.open) { background: #000; }
+#home { background: var(--bg); transform-origin: 50% 0; transition: transform .38s var(--ease), border-radius .38s var(--ease), filter .38s var(--ease); }
+body:has(#sheet.open) #home {
+	transform: translateY(calc(env(safe-area-inset-top) - 2px)) scale(.92);
+	border-radius: 12px;
+	filter: brightness(.6);
+}
 #sheet::after {
 	content: '';
 	position: absolute;
@@ -315,7 +324,7 @@ code { font: 13px var(--mono); color: var(--fg); }
 
 .debug {
 	position: absolute;
-	top: calc(env(safe-area-inset-top) + 30px);
+	top: 30px;
 	left: 0;
 	right: 0;
 	bottom: 0;

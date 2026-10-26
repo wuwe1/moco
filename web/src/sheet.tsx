@@ -126,7 +126,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 			const h = vv ? vv.height : window.innerHeight
 			if (h !== lastH) dlog(`可视高度 ${lastH} → ${h}，offsetTop ${vv?.offsetTop ?? 0}，innerHeight ${window.innerHeight}`)
 			lastH = h
-			el.style.height = `${h}px`
+			el.style.setProperty('--vv-h', `${h}px`)
 			el.style.setProperty('--vv-top', `${vv ? vv.offsetTop : 0}px`)
 			const keyboardOpen = h < window.innerHeight - KEYBOARD_MIN_PX
 			el.style.setProperty('--safe-bottom', keyboardOpen ? '0px' : 'env(safe-area-inset-bottom)')
