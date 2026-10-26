@@ -156,6 +156,7 @@ type message struct {
 	ID    uint32 `json:"id,omitempty"`
 	Path  string `json:"path,omitempty"`
 	Error string `json:"error,omitempty"`
+	Text  string `json:"text,omitempty"`
 
 	Theme screen.Theme `json:"theme,omitzero"`
 	Cell  *cellSize    `json:"cell,omitempty"` // v2：手机上一格多少 CSS 像素，回答 CSI 16 t 用

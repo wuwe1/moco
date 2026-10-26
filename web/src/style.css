@@ -330,6 +330,9 @@ code { font: 13px var(--mono); color: var(--fg); }
 }
 
 .toast {
+	display: flex;
+	align-items: center;
+	gap: 10px;
 	position: absolute;
 	left: 50%;
 	bottom: calc(48px + var(--safe-bottom, env(safe-area-inset-bottom)) + 10px);
@@ -341,6 +344,16 @@ code { font: 13px var(--mono); color: var(--fg); }
 	color: var(--fg);
 	font-size: 13px;
 	z-index: 20;
+}
+
+.toast button {
+	height: auto;
+	padding: 4px 10px;
+	border-radius: 6px;
+	background: var(--fg);
+	color: var(--bg);
+	font-weight: 600;
+	white-space: nowrap;
 }
 
 #bar {

@@ -8,6 +8,7 @@ package screen
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"image/color"
 	"io"
@@ -65,6 +66,8 @@ type Screen struct {
 
 	cursorByProgram bool // 程序设过光标样式（CSI Ps SP q，Ps 不是 0）
 
+	clipboard []string // 程序要复制的文字（OSC 52），跟下一帧发给手机
+
 	k *kitty // 图片（kitty 图形协议）
 
 	cellW, cellH int // 手机上一格多少 CSS 像素；0 表示不知道
@@ -77,6 +80,7 @@ type Frame struct {
 	Forget     []uint32    // 手机该丢掉的图（删了，或同一个编号换了内容）
 	Images     []*Image    // 放置里用到、手机还没有的图
 	Placements []Placement // 现在所有的放置，从下往上；nil 表示没变
+	Clipboard  []string    // 程序复制的文字，手机放进自己的剪贴板
 }
 
 // New 建一块屏幕；模拟器对查询的回答（光标位置、颜色等）写进 respond，也就是程序的输入
@@ -89,6 +93,7 @@ func New(cols, rows int, theme Theme, respond io.Writer) *Screen {
 		DisableMode: func(m ansi.Mode) { s.mode(m, false) },
 	})
 	s.e.RegisterOscHandler(4, s.oscPalette)
+	s.e.RegisterOscHandler(52, s.oscClipboard)
 	s.e.RegisterApcHandler(func(data []byte) bool { return s.k.handle(data, s.e.CursorPosition()) })
 	s.e.RegisterCsiHandler('t', s.windowOps)
 	s.e.RegisterCsiHandler(ansi.Command(0, ' ', 'q'), s.cursorStyleSet)
@@ -138,6 +143,23 @@ func (s *Screen) oscPalette(data []byte) bool {
 		r, g, b, _ := s.palette[n].RGBA()
 		fmt.Fprintf(s.e.InputPipe(), "\x1b]4;%d;rgb:%04x/%04x/%04x\x1b\\", n, r, g, b)
 	}
+	return true
+}
+
+// MaxClipboard 是一次复制最多转给手机的字节数
+const MaxClipboard = 1 << 20
+
+// OSC 52 ; 剪贴板 ; base64 —— 程序要复制文字。查询（? ）不回答：不让电脑上的程序读手机的剪贴板
+func (s *Screen) oscClipboard(data []byte) bool {
+	parts := strings.SplitN(string(data), ";", 3)
+	if len(parts) != 3 || parts[2] == "?" {
+		return true
+	}
+	text, err := base64.StdEncoding.DecodeString(parts[2])
+	if err != nil || len(text) == 0 || len(text) > MaxClipboard {
+		return true
+	}
+	s.clipboard = append(s.clipboard, string(text))
 	return true
 }
 
@@ -297,7 +319,9 @@ func (s *Screen) Frame() (*Frame, time.Duration) {
 		}
 	}
 
-	if f.Data == nil && f.Placements == nil && f.Forget == nil {
+	f.Clipboard, s.clipboard = s.clipboard, nil
+
+	if f.Data == nil && f.Placements == nil && f.Forget == nil && f.Clipboard == nil {
 		return nil, 0
 	}
 	return f, 0

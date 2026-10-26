@@ -111,6 +111,7 @@ const cursorShown = () => page.evaluate(() => {
 	return !!c && c.top >= p.top - 1 && c.bottom <= p.bottom + 1
 })
 const status = () => page.locator('#grab .status').textContent()
+const toastText = () => page.evaluate(() => document.querySelector('.toast')?.textContent ?? '')
 const pair = async () => {
 	await page.fill('#add input[inputmode="url"]', base)
 	await page.fill('#add input[inputmode="numeric"]', pairCode())
@@ -175,6 +176,15 @@ try {
 		await page.keyboard.press('ArrowUp')
 		await page.keyboard.press('Enter')
 		await until(async () => count(await screenText(), 'pasted16') === 2, '第二个 pasted16')
+	})
+	await check('电脑上的程序复制（OSC 52）：进手机剪贴板', async () => {
+		await page.keyboard.type(`printf '\\033]52;c;%s\\007' $(printf 'osc52 复制' | base64)`)
+		await page.keyboard.press('Enter')
+		await until(async () => (await toastText()).includes('已放进手机剪贴板'), '复制提示')
+		const got = await page.evaluate(() => navigator.clipboard.readText())
+		if (got !== 'osc52 复制') throw new Error(`剪贴板里是 ${JSON.stringify(got)}`)
+		await page.keyboard.type('clear')
+		await page.keyboard.press('Enter')
 	})
 	await check('按下滑走再松手：不发', async () => {
 		await page.keyboard.type('echo slid$((5*5))')

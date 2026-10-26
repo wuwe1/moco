@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { writeClipboard } from './clipboard'
 import type { Conn, State } from './conn'
 import { debugLines, dlog, onDebug } from './debug'
 import { ArrowUp, FolderGit2, Keyboard, KeyboardOff } from 'lucide-react'
@@ -41,7 +42,13 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	const [repoOpen, setRepoOpen] = useState(false)
 	const [pasting, setPasting] = useState(false)
 	const [typing, setTyping] = useState(false)
-	const [toast, setToast] = useState<string>()
+	const [toast, setToast] = useState<Toast>()
+	const toastTimer = useRef(0)
+	const flash = (text: string, action?: Toast['action'], ms = TOAST_MS) => {
+		clearTimeout(toastTimer.current)
+		setToast({ text, action })
+		toastTimer.current = window.setTimeout(() => setToast(undefined), ms)
+	}
 	const picker = useRef<HTMLInputElement>(null)
 	const sendImages = async (files: File[]) => {
 		const conn = current.current?.conn
@@ -49,7 +56,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		const paths: string[] = []
 		const failed: string[] = []
 		for (const [i, file] of files.entries()) {
-			setToast(files.length > 1 ? `图片上传中 ${i + 1}/${files.length}…` : '图片上传中…')
+			setToast({ text: files.length > 1 ? `图片上传中 ${i + 1}/${files.length}…` : '图片上传中…' })
 			try {
 				const path = await conn.upload(await shrinkImage(file))
 				dlog(`图片传到 ${path}`)
@@ -61,8 +68,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		}
 		if (paths.length) kb.current?.paste(paths.join(' ') + ' ')
 		if (!failed.length) return setToast(undefined)
-		setToast(`${failed.length} 张没传上去：${failed[0]}`)
-		setTimeout(() => setToast(undefined), TOAST_MS)
+		flash(`${failed.length} 张没传上去：${failed[0]}`)
 	}
 	const [, bump] = useState(0)
 	useEffect(() => (debug ? onDebug(() => bump(n => n + 1)) : undefined), [debug])
@@ -88,6 +94,11 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		}
 		const s = getOrCreateSession(host)
 		s.onPlainTap = () => kb.current?.focus()
+		s.onClipboard = async text => {
+			const n = [...text].length
+			if (await writeClipboard(text)) return flash(`电脑上复制的 ${n} 个字已放进手机剪贴板`)
+			flash(`电脑上复制了 ${n} 个字`, { label: '复制到手机', run: () => writeClipboard(text).then(ok => flash(ok ? '已复制' : '没复制上')) }, CLIP_TOAST_MS)
+		}
 		s.onImage = img => {
 			kb.current?.blur()
 			setPicture(img)
@@ -197,7 +208,16 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 					onCancel={() => setPasting(false)}
 				/>
 			)}
-			{toast && <div className="toast">{toast}</div>}
+			{toast && (
+				<div className="toast">
+					{toast.text}
+					{toast.action && (
+						<button type="button" onClick={toast.action.run}>
+							{toast.action.label}
+						</button>
+					)}
+				</div>
+			)}
 			<input
 				ref={picker}
 				type="file"
@@ -246,6 +266,9 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 
 const ICON_PX = 18
 const TOAST_MS = 3000
+const CLIP_TOAST_MS = 10_000
+
+type Toast = { text: string; action?: { label: string; run: () => void } }
 
 function keyButton(k: (typeof KEYS)[number]) {
 	const Icon = k.icon

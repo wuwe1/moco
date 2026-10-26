@@ -52,6 +52,7 @@ export class Session {
 	private panned = false
 	onPlainTap = () => {}
 	onImage = (_img: { png: Uint8Array<ArrayBuffer>; w: number; h: number }) => {}
+	onClipboard = (_text: string) => {}
 
 	constructor(readonly host: Host) {
 		this.el.className = 'pane'
@@ -79,6 +80,7 @@ export class Session {
 			},
 			this.images,
 		)
+		this.conn.onClipboard = text => this.onClipboard(text)
 		this.term.onRender(() => this.follow())
 		this.term.onData(d => this.conn.send(d))
 		this.term.onResize(({ cols, rows }) => {

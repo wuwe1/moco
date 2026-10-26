@@ -148,3 +148,26 @@ func TestFramesSlowClientNeverBlocksProgram(t *testing.T) {
 	}
 	t.Logf("%d frames, program finished in %v", frames, time.Since(start))
 }
+
+// 程序复制（OSC 52）变成一条 clipboard 消息；herdr 要看到 SSH_TTY 才发 OSC 52，伪终端开的命令都带着它
+func TestFramesClipboard(t *testing.T) {
+	ts, key, priv, _ := setupCmd(t, "sh", "-c", `printf '\033]52;c;aGk=\007'; echo "tty=$SSH_TTY"; cat`)
+	c, ctx := dialFrames(t, ts, key, priv)
+	var clip string
+	var seen strings.Builder
+	for clip == "" || !strings.Contains(seen.String(), "tty=/dev/") {
+		f, m, err := readFrame(ctx, c)
+		if err != nil {
+			t.Fatalf("clip %q, seen %q: %v", clip, seen.String(), err)
+		}
+		if m != nil && m.Type == "clipboard" {
+			clip = m.Text
+			continue
+		}
+		seen.WriteString(f.body)
+		ack(ctx, c, f.seq)
+	}
+	if clip != "hi" {
+		t.Fatalf("clipboard %q", clip)
+	}
+}

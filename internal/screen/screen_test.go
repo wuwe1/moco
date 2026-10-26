@@ -200,6 +200,27 @@ func TestCursorStyleOnlyWhenProgramSetsIt(t *testing.T) {
 	}
 }
 
+// 程序复制的文字跟下一帧走，只走一次；查询剪贴板不回答
+func TestClipboardGoesWithNextFrame(t *testing.T) {
+	answers := &buf{}
+	s := New(20, 4, Theme{}, answers)
+	defer s.Close()
+	frame(t, s)
+	s.Write([]byte("\x1b]52;c;5aSN5Yi2IGNvcHk=\x07\x1b]52;c;?\x07"))
+	f, _ := s.Frame()
+	if f == nil || len(f.Clipboard) != 1 || f.Clipboard[0] != "复制 copy" {
+		t.Fatalf("clipboard: %+v", f)
+	}
+	s.Write([]byte("x"))
+	if f, _ := s.Frame(); f == nil || f.Clipboard != nil {
+		t.Fatalf("clipboard sent twice: %+v", f)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if a := answers.String(); a != "" {
+		t.Fatalf("answered clipboard query: %q", a)
+	}
+}
+
 // 改了尺寸整屏重发
 func TestResizeRepaintsAll(t *testing.T) {
 	s := New(20, 4, Theme{}, io.Discard)

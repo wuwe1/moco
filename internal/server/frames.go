@@ -38,6 +38,10 @@ import (
 //	手机 → [9][JSON {id, op, ...参数}]           op：repos、status、diff、log、commit、tree、file
 //	mocod → {type:"reply", id, data} 或 {type:"reply", id, error}
 //
+// 程序复制文字（OSC 52）时，在那一帧之前：
+//
+//	mocod → {type:"clipboard", text}
+//
 // 手机没确认的帧最多 framesInFlight 个；再有变化就攒着，确认回来时把攒下的合成一帧发。
 // 手机收得慢时帧变少、画面跳着更新，但不会越积越多，程序那边也从不等网络。
 const framesInFlight = 2
@@ -130,6 +134,12 @@ func (s *Server) pumpFrames(ctx context.Context, c *websocket.Conn, sess *term.S
 				binary.BigEndian.PutUint16(msg[7:], uint16(img.H))
 				copy(msg[9:], img.PNG)
 				if !write(msg) {
+					return false
+				}
+			}
+			for _, text := range f.Clipboard {
+				if err := wsjson.Write(ctx, c, message{Type: "clipboard", Text: text}); err != nil {
+					stop("write: " + err.Error())
 					return false
 				}
 			}

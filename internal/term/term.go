@@ -27,12 +27,26 @@ func Start(command []string, cols, rows uint16) (*Session, error) {
 	if home, err := os.UserHomeDir(); err == nil {
 		cmd.Dir = home
 	}
-	// pty.Start 会给子进程开新会话（Setsid）并把伪终端设为它的控制终端
-	tty, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: cols, Rows: rows})
+	ptmx, tty, err := pty.Open()
 	if err != nil {
 		return nil, err
 	}
-	s := &Session{cmd: cmd, tty: tty, done: make(chan struct{})}
+	defer tty.Close()
+	if err := pty.Setsize(ptmx, &pty.Winsize{Cols: cols, Rows: rows}); err != nil {
+		ptmx.Close()
+		return nil, err
+	}
+	// herdr 的客户端只在 SSH_TTY 有值时把程序的复制（OSC 52）发给终端，否则直接 pbcopy 进电脑的剪贴板；
+	// 人确实在别处（手机上），照 sshd 的做法设成这个伪终端
+	cmd.Env = append(cmd.Env, "SSH_TTY="+tty.Name())
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = tty, tty, tty
+	// 新会话、伪终端当控制终端，和 pty.Start 一样
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true}
+	if err := cmd.Start(); err != nil {
+		ptmx.Close()
+		return nil, err
+	}
+	s := &Session{cmd: cmd, tty: ptmx, done: make(chan struct{})}
 	go func() {
 		cmd.Wait()
 		close(s.done)

@@ -30,6 +30,7 @@ type ServerMsg =
 	| { type: 'exit'; code: number }
 	| { type: 'uploaded'; id: number; path?: string; error?: string }
 	| { type: 'reply'; id: number; data?: unknown; error?: string }
+	| { type: 'clipboard'; text: string }
 
 const parseFrame = (buf: Uint8Array) => {
 	const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
@@ -64,6 +65,7 @@ export class Conn {
 	private uploads = new Map<number, { resolve: (path: string) => void; reject: (e: Error) => void }>()
 	private requestSeq = 0
 	private requests = new Map<number, { resolve: (data: unknown) => void; reject: (e: Error) => void }>()
+	onClipboard = (_text: string) => {}
 
 	constructor(
 		private host: Host,
@@ -136,7 +138,7 @@ export class Conn {
 				return
 			}
 			const msg: ServerMsg = JSON.parse(e.data)
-			dlog(`收到 ${msg.type}${'code' in msg ? ' code=' + msg.code : ''}`)
+			if (msg.type !== 'reply') dlog(`收到 ${msg.type}${'code' in msg ? ' code=' + msg.code : ''}`)
 			if (msg.type === 'challenge') {
 				if (msg.name !== this.host.name) return ws.close(4000, 'host mismatch')
 				ws.send(JSON.stringify({ type: 'auth', sig: await signChallenge(msg.name, msg.nonce) }))
@@ -145,6 +147,8 @@ export class Conn {
 				this.uploads.delete(msg.id)
 				if (msg.path) u?.resolve(msg.path)
 				else u?.reject(new Error(msg.error ?? '没有路径'))
+			} else if (msg.type === 'clipboard') {
+				this.onClipboard(msg.text)
 			} else if (msg.type === 'reply') {
 				const r = this.requests.get(msg.id)
 				this.requests.delete(msg.id)
