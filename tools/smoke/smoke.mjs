@@ -67,6 +67,8 @@ const pairCode = () => execFileSync(bin, ['pair'], { env }).toString().match(/(\
 const browser = await chromium.launch({ channel: 'chrome' })
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, permissions: ['clipboard-read', 'clipboard-write', 'notifications'] })
 // 无头 Chrome 弹不出软键盘：换一个 visualViewport，__keyboard(px) 当作键盘占了底下 px 高
+// 假 herdr 当前窗格是个 claude，默认会用「写好再发」；逐键输入的那些检查先按逐键来，「写好再发」单独测
+await ctx.addInitScript(() => localStorage.getItem('moco.inputModes') ?? localStorage.setItem('moco.inputModes', JSON.stringify({ claude: 'keys' })))
 await ctx.addInitScript(() => {
 	const vv = new EventTarget()
 	let kb = 0
@@ -610,6 +612,37 @@ try {
 		await page.click('.herdr-panel [data-tab="w2:t1"]')
 		if ((await lastHerdrCall('pane.focus', '跳到有 agent 的 tab')).pane_id !== 'w2:p1') throw new Error('跳错了')
 		await until(async () => !(await page.locator('.herdr-panel').count()), '面板收起')
+	})
+	await check('写好再发：切过去、回车发整句、草稿留着、切回逐键', async () => {
+		const box = '.composer textarea'
+		await page.focus('#input')
+		await page.locator('.to-compose').tap()
+		await until(() => page.evaluate(() => document.activeElement?.matches('.composer textarea')), '输入框拿到焦点')
+		await page.keyboard.type('echo composed$((5*5))')
+		await page.keyboard.press('Enter')
+		await until(async () => (await screenText()).includes('composed25'), 'composed25')
+		if (await page.inputValue(box)) throw new Error('发完没清空')
+		await page.keyboard.type('draft')
+		await page.locator('#kbd').tap()
+		await until(() => page.evaluate(() => !document.activeElement?.matches('textarea')), '键盘收起')
+		if ((await page.inputValue(box)) !== 'draft') throw new Error('收起键盘后草稿没了')
+		await page.fill(box, '')
+		await page.locator('.composer .keys').tap()
+		await until(() => page.evaluate(() => document.activeElement?.id === 'input'), '切回逐键')
+		if (await page.locator('.composer').count()) throw new Error('逐键模式还显示着输入框')
+	})
+	await check('等你时的快捷回答：列出屏幕上的选项，点了发数字', async () => {
+		herdr.agents[0].agent_status = 'blocked'
+		await page.keyboard.type(`printf '\\n Do you want to proceed?\\n ❯ 1. Yes\\n   2. Yes, and don\\x27t ask again\\n   3. No\\n'; read -n1 x; echo; echo picked$x`)
+		await page.keyboard.press('Enter')
+		await until(async () => (await page.locator('.answers button').count()) === 3, '三个回答按钮')
+		const labels = await page.locator('.answers span').allTextContents()
+		if (labels.join('|') !== "Yes|Yes, and don't ask again|No") throw new Error('选项 ' + labels.join('|'))
+		await shot('answers')
+		await page.locator('.answers button').nth(1).tap()
+		await until(async () => (await screenText()).includes('picked2'), 'picked2')
+		await until(async () => !(await page.locator('.answers').count()), '点过以后收起')
+		herdr.agents[0].agent_status = 'working'
 	})
 	await check('首页卡片：agent 状态，点一个直接切过去', async () => {
 		await closeSheet()

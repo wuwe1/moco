@@ -121,9 +121,11 @@ type Hooks = {
 	send: (s: string) => void
 	onPasteFailed: () => void
 	onPickImage: () => void
+	onKbd: () => void // 键盘按钮：弹出或收起，用哪种输入由抽屉定
+	pasteInto: () => ((s: string) => void) | undefined // 开着「写好再发」时，剪贴板粘进草稿
 }
 
-export function keyboard(root: HTMLElement, { term, send, onPasteFailed, onPickImage }: Hooks) {
+export function keyboard(root: HTMLElement, { term, send, onPasteFailed, onPickImage, onKbd, pasteInto }: Hooks) {
 	const input = root.querySelector('#input') as HTMLTextAreaElement
 	const compose = root.querySelector('#compose') as HTMLDivElement
 	const ctrlBtn = root.querySelector('[data-key="ctrl"]') as HTMLButtonElement
@@ -155,8 +157,9 @@ export function keyboard(root: HTMLElement, { term, send, onPasteFailed, onPickI
 		s = s.replace(/\r?\n/g, '\r')
 		const bracketed = term()?.modes.bracketedPasteMode
 		const lines = s.split('\r').length
-		if (!bracketed && lines > 1 && !confirm(`粘贴 ${lines} 行？终端里的程序没开粘贴模式，每一行都会像按了回车一样执行。`)) return
+		if (!bracketed && lines > 1 && !confirm(`粘贴 ${lines} 行？终端里的程序没开粘贴模式，每一行都会像按了回车一样执行。`)) return false
 		send(bracketed ? `\x1b[200~${s}\x1b[201~` : s)
+		return true
 	}
 
 	input.addEventListener('beforeinput', e => {
@@ -206,8 +209,8 @@ export function keyboard(root: HTMLElement, { term, send, onPasteFailed, onPickI
 		try {
 			const text = await navigator.clipboard.readText()
 			dlog(`读剪贴板：${text.length} 个字`)
-			if (text) paste(text)
-			else onPasteFailed()
+			if (!text) onPasteFailed()
+			else (pasteInto() ?? paste)(text)
 		} catch (e) {
 			dlog(`读剪贴板失败：${e}`)
 			onPasteFailed()
@@ -222,12 +225,7 @@ export function keyboard(root: HTMLElement, { term, send, onPasteFailed, onPickI
 		else pressable(btn, { click: onPickImage })
 	}
 
-	pressable(root.querySelector<HTMLButtonElement>('#kbd')!, {
-		click: () => {
-			if (document.activeElement === input) input.blur()
-			else input.focus()
-		},
-	})
+	pressable(root.querySelector<HTMLButtonElement>('#kbd')!, { click: onKbd })
 
 	reset()
 	return { focus: () => input.focus(), blur: () => input.blur(), paste }

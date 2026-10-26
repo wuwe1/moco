@@ -387,7 +387,7 @@ body:has(#sheet.open) #home {
 #compose {
 	position: absolute;
 	left: 8px;
-	bottom: calc(48px + var(--safe-bottom, env(safe-area-inset-bottom)) + 6px);
+	bottom: calc(100% + 6px);
 	max-width: calc(100% - 16px);
 	padding: 4px 8px;
 	border-radius: 6px;
@@ -405,7 +405,7 @@ body:has(#sheet.open) #home {
 	gap: 10px;
 	position: absolute;
 	left: 50%;
-	bottom: calc(48px + var(--safe-bottom, env(safe-area-inset-bottom)) + 10px);
+	bottom: calc(100% + 10px);
 	transform: translateX(-50%);
 	max-width: calc(100% - 32px);
 	padding: 6px 12px;
@@ -469,6 +469,60 @@ body:has(#sheet.open) #home {
 }
 .sel-menu button + button { border-left: 1px solid color-mix(in srgb, var(--bg) 25%, transparent); }
 
+/* 终端下面的一组：回答按钮、写好再发的输入框、按键栏。提示、粘贴框浮在它上面（bottom: 100%） */
+.dock { position: relative; flex: none; background: var(--bg); }
+
+.answers { display: grid; gap: 6px; padding: 8px 8px 2px; border-top: 1px solid var(--line); }
+:where(#sheet) .answers button {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: auto;
+	min-height: 40px;
+	padding: 8px 12px;
+	border-radius: 10px;
+	font: 15px/1.3 var(--sans);
+	text-align: left;
+}
+:where(#sheet) .answers button:first-child { background: color-mix(in srgb, var(--ok) 28%, var(--key)); }
+.answers b { flex: none; color: var(--dim); font: 600 13px var(--mono); }
+.answers span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.composer { display: flex; align-items: flex-end; gap: 6px; padding: 8px 6px 2px; border-top: 1px solid var(--line); }
+.composer textarea {
+	flex: 1;
+	min-width: 0;
+	min-height: 36px;
+	padding: 7px 12px;
+	border: 1px solid var(--line);
+	border-radius: 18px;
+	background: var(--term);
+	color: var(--fg);
+	font: 16px/1.35 var(--sans);
+	resize: none;
+	outline: none;
+	user-select: text;
+	-webkit-user-select: text;
+	-webkit-touch-callout: default;
+	touch-action: auto;
+}
+.composer textarea:focus { border-color: var(--key-on); }
+:where(#sheet) .composer button { width: 36px; min-width: 36px; height: 36px; padding: 0; border-radius: 50%; display: inline-grid; place-items: center; }
+:where(#sheet) .composer .send { background: var(--fg); color: var(--bg); }
+:where(#sheet) .composer :is(.keys, [aria-label="图片"]) { background: none; color: var(--dim); }
+
+:where(#sheet) .to-compose {
+	position: absolute;
+	right: 8px;
+	bottom: calc(100% + 8px);
+	z-index: 3;
+	height: 30px;
+	padding: 0 12px;
+	border-radius: 15px;
+	background: var(--key-on);
+	font-size: 13px;
+}
+
 #bar {
 	position: relative;
 	display: flex;
@@ -505,7 +559,7 @@ body:has(#sheet.open) #home {
 	position: absolute;
 	left: 8px;
 	right: 8px;
-	bottom: calc(48px + var(--safe-bottom, env(safe-area-inset-bottom)) + 8px);
+	bottom: calc(100% + 8px);
 	z-index: 3;
 	display: flex;
 	flex-direction: column;

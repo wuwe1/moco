@@ -1,4 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { flushSync } from 'react-dom'
+import { Answers } from './answers'
+import { Composer, hasDraft, type ComposerHandle } from './composer'
 import { writeClipboard } from './clipboard'
 import type { Conn, State } from './conn'
 import { debugLines, dlog, onDebug } from './debug'
@@ -10,7 +13,7 @@ import { Lightbox, type Picture } from './lightbox'
 import { shrinkImage } from './shrink'
 import { SelectionLayer } from './selection-ui'
 import { connOf, getOrCreateSession, useRerenderOnSessionChange, type Session } from './session'
-import type { Host } from './store'
+import { inputModeFor, setInputModeFor, type Host } from './store'
 
 const RepoView = lazy(() => import('./repo/RepoView'))
 
@@ -19,6 +22,8 @@ const CLOSE_DRAG_PX = 120
 const FLING_MIN_PX = 30
 const FLING_PX_PER_MS = 0.6
 const TAP_SLOP_PX = 6
+// 粘贴完晚一点再按回车：别让程序把回车当成粘贴的一部分
+const ENTER_AFTER_PASTE_MS = 80
 
 const STATUS: Record<State, string> = {
 	open: '已连接',
@@ -47,6 +52,41 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 	const herdr = useHerdr(host?.id)
 	const [pasting, setPasting] = useState(false)
 	const [typing, setTyping] = useState(false)
+	const [composerOpen, setComposerOpen] = useState(false)
+	const composer = useRef<ComposerHandle>(null)
+	// 从「写好再发」里选的图：传完路径插进草稿，选图时键盘收起也别把输入框关掉
+	const pickForDraft = useRef(false)
+	// 当前窗格的 agent：决定用哪种输入、要不要列出回答
+	const agent = herdr?.agents.find(a => a.pane === herdr.pane)
+	const mode = inputModeFor(agent?.name)
+	const draftKey = `${host?.id}:${herdr?.pane ?? ''}`
+	const openInput = () => {
+		if (mode === 'keys') return kb.current?.focus()
+		flushSync(() => setComposerOpen(true))
+		composer.current?.focus()
+	}
+	const switchMode = (to: 'compose' | 'keys') => {
+		setInputModeFor(agent?.name, to)
+		if (to === 'keys') {
+			setComposerOpen(false)
+			return kb.current?.focus()
+		}
+		flushSync(() => setComposerOpen(true))
+		composer.current?.focus()
+	}
+	const pickImage = () => {
+		pickForDraft.current = !!composer.current
+		picker.current?.click()
+	}
+	const sendComposed = (text: string) => {
+		const s = current.current
+		if (!s) return
+		if (text && !kb.current?.paste(text)) return
+		setTimeout(() => s.conn.send('\r'), text ? ENTER_AFTER_PASTE_MS : 0)
+	}
+	// keyboard() 只建一次：它要的都从这里取最新的
+	const latest = useRef({ openInput, pickImage })
+	latest.current = { openInput, pickImage }
 	const [toast, setToast] = useState<Toast>()
 	const toastTimer = useRef(0)
 	const flash = (text: string, action?: Toast['action'], ms = TOAST_MS) => {
@@ -71,7 +111,9 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 				failed.push(e instanceof Error ? e.message : String(e))
 			}
 		}
-		if (paths.length) kb.current?.paste(paths.join(' ') + ' ')
+		const into = pickForDraft.current ? composer.current?.insert : undefined
+		pickForDraft.current = false
+		if (paths.length) (into ?? kb.current?.paste)?.(paths.join(' ') + ' ')
 		if (!failed.length) return setToast(undefined)
 		flash(`${failed.length} 张没传上去：${failed[0]}`)
 	}
@@ -84,8 +126,15 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 			term: () => current.current?.term,
 			send: s => current.current?.conn.send(s),
 			onPasteFailed: () => setPasting(true),
-			onPickImage: () => picker.current?.click(),
+			onPickImage: () => latest.current.pickImage(),
+			onKbd: () => {
+				const a = document.activeElement
+				if (a instanceof HTMLTextAreaElement && root.current!.contains(a)) a.blur()
+				else latest.current.openInput()
+			},
+			pasteInto: () => composer.current?.insert,
 		})
+		picker.current!.addEventListener('cancel', () => (pickForDraft.current = false))
 	}, [])
 
 	useEffect(() => {
@@ -99,7 +148,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 			return
 		}
 		const s = getOrCreateSession(host)
-		s.onPlainTap = () => kb.current?.focus()
+		s.onPlainTap = () => latest.current.openInput()
 		s.onClipboard = async text => {
 			const n = [...text].length
 			if (await writeClipboard(text)) return flash(`电脑上复制的 ${n} 个字已放进手机剪贴板`)
@@ -135,8 +184,12 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 		vv?.addEventListener('resize', layout)
 		vv?.addEventListener('scroll', layout)
 		window.addEventListener('resize', layout)
+		// 按键栏上面多了回答按钮、输入框：终端区变矮，跟着重算行列
+		const panes = new ResizeObserver(layout)
+		panes.observe(sessionMount.current!)
 		layout()
 		return () => {
+			panes.disconnect()
 			vv?.removeEventListener('resize', layout)
 			vv?.removeEventListener('scroll', layout)
 			window.removeEventListener('resize', layout)
@@ -225,25 +278,6 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 					<button className="primary" onClick={() => props.onRepair(host)}>重新配对</button>
 				</div>
 			)}
-			{pasting && (
-				<PasteBox
-					onSend={text => {
-						setPasting(false)
-						kb.current?.paste(text)
-					}}
-					onCancel={() => setPasting(false)}
-				/>
-			)}
-			{toast && (
-				<div className="toast">
-					{toast.text}
-					{toast.action && (
-						<button type="button" onClick={toast.action.run}>
-							{toast.action.label}
-						</button>
-					)}
-				</div>
-			)}
 			<input
 				ref={picker}
 				type="file"
@@ -256,29 +290,72 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 					if (files.length) sendImages(files)
 				}}
 			/>
-			<div id="compose" hidden />
-			<div id="bar">
-				{KEYS.map(keyButton)}
-				<button id="kbd" aria-label={typing ? '收起键盘' : '弹出键盘'}>
-					{typing ? <KeyboardOff size={ICON_PX} /> : <Keyboard size={ICON_PX} />}
-				</button>
-				<textarea
-					id="input"
-					rows={1}
-					autoCapitalize="off"
-					autoComplete="off"
-					autoCorrect="off"
-					spellCheck={false}
-					onFocus={() => {
-						dlog('输入框拿到焦点')
-						setTyping(true)
-					}}
-					onBlur={e => {
-						const to = e.relatedTarget as HTMLElement | null
-						dlog(`输入框失去焦点，焦点去了 ${to ? to.tagName.toLowerCase() + (to.className ? '.' + to.className : '') : '无（键盘收起或点了别处）'}`)
-						setTyping(false)
-					}}
-				/>
+			{/* 贴在终端下面的一组：回答按钮、输入框、按键栏；提示和粘贴框浮在这组上面 */}
+			<div className="dock">
+				{agent?.status === 'blocked' && current.current && (
+					<Answers key={herdr!.pane} term={current.current.term} onAnswer={k => current.current?.conn.send(k)} />
+				)}
+				{mode === 'compose' && composerOpen && (
+					<Composer
+						ref={composer}
+						draftKey={draftKey}
+						onSend={sendComposed}
+						onKeys={() => switchMode('keys')}
+						onImage={pickImage}
+						onFocusChange={f => {
+							setTyping(f)
+							if (!f && !hasDraft(draftKey) && !pickForDraft.current) setComposerOpen(false)
+						}}
+					/>
+				)}
+				{mode === 'keys' && typing && (
+					<button type="button" className="to-compose" onPointerDown={e => e.preventDefault()} onClick={() => switchMode('compose')}>
+						写好再发
+					</button>
+				)}
+				{pasting && (
+					<PasteBox
+						onSend={text => {
+							setPasting(false)
+							kb.current?.paste(text)
+						}}
+						onCancel={() => setPasting(false)}
+					/>
+				)}
+				{toast && (
+					<div className="toast">
+						{toast.text}
+						{toast.action && (
+							<button type="button" onClick={toast.action.run}>
+								{toast.action.label}
+							</button>
+						)}
+					</div>
+				)}
+				<div id="compose" hidden />
+				<div id="bar">
+					{KEYS.map(keyButton)}
+					<button id="kbd" aria-label={typing ? '收起键盘' : '弹出键盘'}>
+						{typing ? <KeyboardOff size={ICON_PX} /> : <Keyboard size={ICON_PX} />}
+					</button>
+					<textarea
+						id="input"
+						rows={1}
+						autoCapitalize="off"
+						autoComplete="off"
+						autoCorrect="off"
+						spellCheck={false}
+						onFocus={() => {
+							dlog('输入框拿到焦点')
+							setTyping(true)
+						}}
+						onBlur={e => {
+							const to = e.relatedTarget as HTMLElement | null
+							dlog(`输入框失去焦点，焦点去了 ${to ? to.tagName.toLowerCase() + (to.className ? '.' + to.className : '') : '无（键盘收起或点了别处）'}`)
+							setTyping(false)
+						}}
+					/>
+				</div>
 			</div>
 			{repoOpen && conn && host && (
 				<Suspense fallback={null}>

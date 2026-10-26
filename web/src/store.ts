@@ -104,3 +104,11 @@ export const saveCustomFontList = (list: CustomFont[]) => localStorage.setItem(C
 const repoKey = (hostId: string) => `moco.repo.${hostId}`
 export const repoFor = (hostId: string) => localStorage.getItem(repoKey(hostId)) ?? undefined
 export const setRepoFor = (hostId: string, path: string) => localStorage.setItem(repoKey(hostId), path)
+
+// 输入方式按 agent 记（claude、pi 这样的名字；没有 agent 的窗格算 shell）：有 agent 默认写好再发，shell 默认逐键
+export type InputMode = 'compose' | 'keys'
+const INPUT_MODES = 'moco.inputModes'
+export const inputModeFor = (agent: string | undefined): InputMode =>
+	readJSON<Record<string, InputMode>>(INPUT_MODES, {})[agent ?? 'shell'] ?? (agent ? 'compose' : 'keys')
+export const setInputModeFor = (agent: string | undefined, mode: InputMode) =>
+	localStorage.setItem(INPUT_MODES, JSON.stringify({ ...readJSON<Record<string, InputMode>>(INPUT_MODES, {}), [agent ?? 'shell']: mode }))
