@@ -6,6 +6,7 @@ import { ArrowUp, FolderGit2, Keyboard, KeyboardOff } from 'lucide-react'
 import { KEYS, keyboard } from './keyboard'
 import { Lightbox, type Picture } from './lightbox'
 import { shrinkImage } from './shrink'
+import { SelectionLayer } from './selection-ui'
 import { connOf, getOrCreateSession, useRerenderOnSessionChange, type Session } from './session'
 import type { Host } from './store'
 
@@ -99,6 +100,10 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 			if (await writeClipboard(text)) return flash(`电脑上复制的 ${n} 个字已放进手机剪贴板`)
 			flash(`电脑上复制了 ${n} 个字`, { label: '复制到手机', run: () => writeClipboard(text).then(ok => flash(ok ? '已复制' : '没复制上')) }, CLIP_TOAST_MS)
 		}
+		s.onSelection = () => {
+			if (s.selection) kb.current?.blur()
+			bump(n => n + 1)
+		}
 		s.onImage = img => {
 			kb.current?.blur()
 			setPicture(img)
@@ -188,6 +193,7 @@ export function Sheet(props: { host?: Host; onClose: () => void; onRepair: (h: H
 				</button>
 			</header>
 			<div id="panes" ref={sessionMount} />
+			{host && current.current && root.current && <SelectionLayer session={current.current} root={root.current} onDone={msg => msg && flash(msg)} />}
 			{debug && (
 				<pre className="debug" onClick={() => setDebug(false)}>
 					{debugLines().join('\n')}

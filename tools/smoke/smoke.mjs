@@ -52,6 +52,9 @@ const errors = []
 page.on('pageerror', e => errors.push(e.message))
 page.on('console', m => m.type() === 'error' && errors.push(m.text()))
 
+// SHOTS=目录：在几个界面上截图，看样子用
+const shot = name => process.env.SHOTS && page.screenshot({ path: join(process.env.SHOTS, `${name}.png`) })
+
 let step = ''
 const check = async (name, fn) => {
 	step = name
@@ -305,6 +308,63 @@ try {
 		await until(async () => !/^\s*1\s+2\s/.test(await screenText()), 'less 翻过第一屏')
 		await page.focus('#input')
 		await page.keyboard.type('q')
+	})
+	// 输出那一行（不是带 echo 的命令行）里 word 的第 nth 个字的中心
+	const charAt = (word, nth = 0) => page.evaluate(([word, nth]) => {
+		const rows = [...document.querySelector('.pane:not([hidden]) .xterm-rows').children]
+		const row = rows.findLast(r => r.textContent.includes(word) && !r.textContent.includes('echo'))
+		const walk = document.createTreeWalker(row, NodeFilter.SHOW_TEXT)
+		for (let n; (n = walk.nextNode()); ) {
+			const i = n.data.indexOf(word)
+			if (i < 0) continue
+			const r = document.createRange()
+			r.setStart(n, i + nth)
+			r.setEnd(n, i + nth + 1)
+			const b = r.getBoundingClientRect()
+			return { x: b.x + b.width / 2, y: b.y + b.height / 2 }
+		}
+	}, [word, nth])
+	const copySelection = async () => {
+		await page.locator('.sel-menu button', { hasText: '复制' }).tap()
+		await until(async () => !(await page.locator('.selection').count()), '选区收起')
+		return page.evaluate(() => navigator.clipboard.readText())
+	}
+	await check('长按选字：选词、选链接、拖把手、长按接着拖，复制', async () => {
+		await page.focus('#input')
+		await page.keyboard.type('echo "pick wordone https://example.com/a?b=1, tail"')
+		await page.keyboard.press('Enter')
+		await until(async () => (await screenText()).includes('tail'), '输出')
+		await touch(await charAt('wordone', 3), { holdMs: 600 })
+		await until(() => page.locator('.sel-menu').count(), '选区菜单')
+		if (await page.evaluate(() => document.activeElement?.id === 'input')) throw new Error('长按后键盘没收起')
+		let got = await copySelection()
+		if (got !== 'wordone') throw new Error(`选词得到 ${JSON.stringify(got)}`)
+
+		await touch(await charAt('example'), { holdMs: 600 })
+		await until(() => page.locator('.sel-menu button', { hasText: '打开' }).count(), '链接的「打开」')
+		await shot('select-url')
+		got = await copySelection()
+		if (got !== 'https://example.com/a?b=1') throw new Error(`选链接得到 ${JSON.stringify(got)}`)
+
+		await touch(await charAt('wordone', 3), { holdMs: 600 })
+		await until(() => page.locator('.sel-handle.end').count(), '把手')
+		const from = await center(page.locator('.sel-handle.end'))
+		const to = await charAt('tail', 3)
+		await touch(from, { moves: [1, 2, 3, 4, 5].map(i => [(to.x - from.x) * i / 5, (to.y - from.y) * i / 5]) })
+		got = await copySelection()
+		if (got !== 'wordone https://example.com/a?b=1, tail') throw new Error(`拖把手后得到 ${JSON.stringify(got)}`)
+
+		const start = await charAt('pick')
+		const end = await charAt('wordone', 6)
+		await touch(start, { holdMs: 600, moves: [1, 2, 3].map(i => [(end.x - start.x) * i / 3, 0]) })
+		got = await copySelection()
+		if (got !== 'pick wordone') throw new Error(`长按接着拖得到 ${JSON.stringify(got)}`)
+
+		await touch(await charAt('tail'), { holdMs: 600 })
+		await until(() => page.locator('.selection').count(), '选区')
+		await touch(await charAt('pick'))
+		await until(async () => !(await page.locator('.selection').count()), '轻点收起选区')
+		if (await page.evaluate(() => document.activeElement?.id === 'input')) throw new Error('收起选区的那一下不该弹键盘')
 	})
 	await check('拖把手收起，首页有缩略图', async () => {
 		await closeSheet()

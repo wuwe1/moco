@@ -356,6 +356,49 @@ code { font: 13px var(--mono); color: var(--fg); }
 	white-space: nowrap;
 }
 
+.selection { position: absolute; inset: 0; z-index: 12; pointer-events: none; }
+/* 把手：一根和行一样高的竖线，头上（起点）或脚下（终点）一个圆点；::after 把能按的范围撑大 */
+.sel-handle {
+	position: absolute;
+	width: 2px;
+	margin-left: -1px;
+	background: var(--fg);
+	pointer-events: auto;
+	touch-action: none;
+}
+.sel-handle::before {
+	content: '';
+	position: absolute;
+	left: -5px;
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	background: var(--fg);
+}
+.sel-handle.start::before { top: -11px; }
+.sel-handle.end::before { bottom: -11px; }
+.sel-handle::after { content: ''; position: absolute; inset: -22px -18px; }
+.sel-menu {
+	position: absolute;
+	display: flex;
+	transform: translateX(-50%);
+	border-radius: 8px;
+	overflow: hidden;
+	background: var(--fg);
+	box-shadow: 0 4px 14px rgb(0 0 0 / .35);
+	pointer-events: auto;
+}
+.sel-menu button {
+	height: 40px;
+	padding: 0 14px;
+	border-radius: 0;
+	background: none;
+	color: var(--bg);
+	font-size: 14px;
+	white-space: nowrap;
+}
+.sel-menu button + button { border-left: 1px solid color-mix(in srgb, var(--bg) 25%, transparent); }
+
 #bar {
 	position: relative;
 	display: flex;

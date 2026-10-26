@@ -11,6 +11,7 @@ import { renderThumbnail } from './thumbnail'
 import { ImageLayer } from './images'
 import { currentTheme, fontSize, saveScreen, setFontSize, termPrefs, type Host } from './store'
 import { currentFontStack, fontKey, loadFont } from './fonts'
+import { cellAt, highlight, ordered, rangeText, screenRange, wordAt, type Cell, type Range } from './select'
 
 const sessions = new Map<string, Session>()
 const listeners = new Set<() => void>()
@@ -50,6 +51,9 @@ export class Session {
 	private fit = new FitAddon()
 	private opened = false
 	private panned = false
+	private held?: Range
+	selection?: Range
+	onSelection = () => {}
 	onPlainTap = () => {}
 	onImage = (_img: { png: Uint8Array<ArrayBuffer>; w: number; h: number }) => {}
 	onClipboard = (_text: string) => {}
@@ -85,6 +89,7 @@ export class Session {
 		this.term.onData(d => this.conn.send(d))
 		this.term.onResize(({ cols, rows }) => {
 			dlog(`终端改成 ${cols}×${rows}`)
+			this.select(undefined)
 			this.conn.resize(cols, rows)
 		})
 	}
@@ -110,10 +115,54 @@ export class Session {
 		this.opened = true
 		this.term.open(this.el)
 		this.images.mount()
-		gestures(this.el, this.term, { onTap: (x, y) => this.tap(x, y), onFont: setFontSizeForAllSessions })
+		gestures(this.el, this.term, {
+			onTap: (x, y) => this.tap(x, y),
+			onFont: setFontSizeForAllSessions,
+			onHold: (x, y) => this.selectWord(x, y),
+			onHoldMove: (x, y) => this.dragFromWord(x, y),
+			onScroll: () => this.select(undefined),
+		})
+	}
+
+	select(r: Range | undefined) {
+		if (!r && !this.selection) return
+		this.selection = r
+		highlight(this.term, r)
+		this.onSelection()
+	}
+
+	private selectWord(x: number, y: number) {
+		const at = cellAt(this.term, x, y)
+		if (!at) return
+		this.held = wordAt(this.term, at)
+		navigator.vibrate?.(10)
+		this.select(this.held)
+	}
+
+	// 长按后不松手接着拖：从那个词拖到手指处
+	private dragFromWord(x: number, y: number) {
+		const at = cellAt(this.term, x, y)
+		if (!at || !this.held) return
+		const { start, end } = this.held
+		this.select(at.row > start.row || (at.row === start.row && at.col >= start.col) ? ordered(start, at) : ordered(at, end))
+	}
+
+	// 拖选区一头的把手：另一头 fixed 不动，拖过了头就互换
+	moveEdge(fixed: Cell, x: number, y: number) {
+		const at = cellAt(this.term, x, y)
+		if (at) this.select(ordered(at, fixed))
+	}
+
+	selectAll() {
+		this.select(screenRange(this.term))
+	}
+
+	selectedText() {
+		return this.selection ? rangeText(this.term, this.selection) : ''
 	}
 
 	private tap(x: number, y: number) {
+		if (this.selection) return this.select(undefined)
 		const img = this.images.hit(x, y)
 		if (img) return this.onImage(img)
 		if (!this.click(x, y)) this.onPlainTap()
@@ -144,6 +193,7 @@ export class Session {
 	detach() {
 		dlog(`收起 ${this.host.name}，连接状态 ${this.conn.state}`)
 		this.snapshot()
+		this.select(undefined)
 		this.showAsFocused(false)
 		this.el.hidden = true
 	}

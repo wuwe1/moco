@@ -3,9 +3,21 @@ import { grid } from './grid'
 import { FONT_MAX, FONT_MIN } from './store'
 
 const WHEEL_PER_FRAME = 3
+const HOLD_MS = 450
+const HOLD_SLOP_PX = 8
 
-export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: number, y: number) => void; onFont: (size: number) => void }) {
-	let mode: 'none' | 'scroll' | 'pinch' = 'none'
+type Opts = {
+	onTap: (x: number, y: number) => void
+	onFont: (size: number) => void
+	// 长按：按住不动 HOLD_MS 触发，之后手指挪动交给 onHoldMove，不再滚动
+	onHold: (x: number, y: number) => void
+	onHoldMove: (x: number, y: number) => void
+	onScroll: () => void
+}
+
+export function gestures(el: HTMLElement, term: Terminal, opts: Opts) {
+	let mode: 'none' | 'scroll' | 'pinch' | 'hold' = 'none'
+	let holdTimer = 0
 	let lastY = 0
 	let lastT = 0
 	let acc = 0
@@ -51,6 +63,7 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 		const lines = Math.trunc(acc / h)
 		if (lines) {
 			acc -= lines * h
+			opts.onScroll()
 			wheel(lines)
 		}
 	}
@@ -79,6 +92,7 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 
 	swallowTouch('touchstart', e => {
 		cancelAnimationFrame(raf)
+		clearTimeout(holdTimer)
 		queued = 0
 		if (e.touches.length >= 2) {
 			mode = 'pinch'
@@ -92,6 +106,10 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 		y = lastY = t.clientY
 		startT = lastT = e.timeStamp
 		acc = upwardPxPerMs = moved = 0
+		holdTimer = window.setTimeout(() => {
+			mode = 'hold'
+			opts.onHold(x, y)
+		}, HOLD_MS)
 	})
 
 	swallowTouch('touchmove', e => {
@@ -100,8 +118,10 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 			if (size !== term.options.fontSize) opts.onFont(size)
 			return
 		}
-		if (mode !== 'scroll') return
 		const t = e.touches[0]
+		if (mode === 'hold') return opts.onHoldMove(t.clientX, t.clientY)
+		if (mode !== 'scroll') return
+		if (Math.hypot(t.clientX - x, t.clientY - y) > HOLD_SLOP_PX) clearTimeout(holdTimer)
 		const dy = lastY - t.clientY
 		const dt = Math.max(1, e.timeStamp - lastT)
 		upwardPxPerMs = 0.8 * (dy / dt) + 0.2 * upwardPxPerMs
@@ -113,6 +133,7 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 
 	swallowTouch('touchend', e => {
 		if (e.touches.length) return
+		clearTimeout(holdTimer)
 		if (mode === 'scroll') {
 			if (moved < 8 && e.timeStamp - startT < 300) opts.onTap(x, y)
 			else if (e.timeStamp - lastT < 80 && Math.abs(upwardPxPerMs) > 0.3) glide()
@@ -120,5 +141,8 @@ export function gestures(el: HTMLElement, term: Terminal, opts: { onTap: (x: num
 		mode = 'none'
 	})
 
-	swallowTouch('touchcancel', () => { mode = 'none' })
+	swallowTouch('touchcancel', () => {
+		clearTimeout(holdTimer)
+		mode = 'none'
+	})
 }
