@@ -23,7 +23,7 @@ func dialFrames(t *testing.T, ts *httptest.Server, key string, priv ed25519.Priv
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(cancel)
 	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(ts.URL, "http")+"/ws", &websocket.DialOptions{
-		Subprotocols: []string{ProtocolFrames, Protocol},
+		Subprotocols: []string{ProtocolFrames},
 		HTTPHeader:   http.Header{"Origin": {origin}},
 	})
 	if err != nil {

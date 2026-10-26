@@ -1,14 +1,13 @@
 // Package server 是 mocod 的 HTTP 服务：/health、/pair、/ws。
 //
-// /ws 的协议（子协议 moco.v2，旧页面用 moco.v1）：
+// /ws 的协议（子协议 moco.v2）：
 //
-//	手机 → {type:"hello", key, cols, rows, theme}  theme 只有 v2 用：回答程序对颜色的查询
+//	手机 → {type:"hello", key, cols, rows, theme}  theme：回答程序对颜色的查询
 //	mocod → {type:"challenge", nonce, name}      nonce、签名都是 base64url
 //	手机 → {type:"auth", sig}                    对 auth.Message(name, nonce) 的 Ed25519 签名
 //	mocod → {type:"ready", name}                 之后开终端
 //	之后二进制帧第一个字节是类型：手机发 0=输入、1=改大小（JSON {cols,rows,cell?,theme?}，换了主题也走这条）；
-//	v1：mocod 发 0=终端的原始输出。
-//	v2：mocod 发 2=一帧（见 frames.go），手机画完回 3=确认（4 字节序号）。
+//	mocod 发 2=一帧（见 frames.go），手机画完回 3=确认（4 字节序号）。
 //	命令退出时 mocod 发 {type:"exit", code} 再关连接
 package server
 
@@ -17,12 +16,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
-	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -34,19 +31,13 @@ import (
 	"github.com/wuwe1/moco/internal/term"
 )
 
-const (
-	Protocol       = "moco.v1" // 原样转发终端输出
-	ProtocolFrames = "moco.v2" // 在电脑上维护画面，只发变化（internal/screen）
-)
+// 在电脑上维护画面，只发变化（internal/screen）
+const ProtocolFrames = "moco.v2"
 
 // 关连接的原因码：App 看到 4401 就提示重新配对
 const (
 	CloseUnauthorized websocket.StatusCode = 4401
 	CloseStartFailed  websocket.StatusCode = 4500
-	CloseTooSlow      websocket.StatusCode = 4503 // 手机收得太慢，积压超过 maxPending；手机照常重连
-
-	maxPending = 8 << 20   // 积压上限
-	maxFrame   = 256 << 10 // 一帧最多带这么多输出
 )
 
 // features 写在 /health 里，手机看有没有再用：旧版 mocod 不认 watch，会照常开一个终端
@@ -126,7 +117,7 @@ func (s *Server) preflight(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	s.cors(w, r)
-	writeJSON(w, http.StatusOK, map[string]any{"name": s.Cfg.Name, "version": s.Version, "protocol": ProtocolFrames, "protocols": []string{ProtocolFrames, Protocol}, "features": features})
+	writeJSON(w, http.StatusOK, map[string]any{"name": s.Cfg.Name, "version": s.Version, "protocol": ProtocolFrames, "protocols": []string{ProtocolFrames}, "features": features})
 }
 
 func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
@@ -168,7 +159,7 @@ type message struct {
 	Text  string `json:"text,omitempty"`
 
 	Theme screen.Theme `json:"theme,omitzero"`
-	Cell  *cellSize    `json:"cell,omitempty"` // v2：手机上一格多少 CSS 像素，回答 CSI 16 t 用
+	Cell  *cellSize    `json:"cell,omitempty"` // 手机上一格多少 CSS 像素，回答 CSI 16 t 用
 }
 
 type cellSize struct {
@@ -184,7 +175,7 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	}
 	// 来源上面自己查过了
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		Subprotocols:       []string{ProtocolFrames, Protocol},
+		Subprotocols:       []string{ProtocolFrames},
 		InsecureSkipVerify: true,
 		// 终端输出里大量重复的控制序列，压缩后大约只剩五分之一；手机在外面用流量时差别很大
 		CompressionMode: websocket.CompressionContextTakeover,
@@ -194,8 +185,7 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer c.CloseNow()
-	proto := c.Subprotocol()
-	if proto != Protocol && proto != ProtocolFrames {
+	if c.Subprotocol() != ProtocolFrames {
 		c.Close(websocket.StatusPolicyViolation, "subprotocol "+ProtocolFrames+" required")
 		return
 	}
@@ -229,14 +219,8 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	if err := wsjson.Write(r.Context(), c, message{Type: "ready", Name: s.Cfg.Name}); err != nil {
 		return
 	}
-	s.Log.Info("session open", "remote", r.RemoteAddr, "protocol", proto, "cols", cols, "rows", rows)
-	var why string
-	if proto == ProtocolFrames {
-		why = s.pumpFrames(r.Context(), c, sess, hello)
-	} else {
-		why = s.pump(r.Context(), c, sess, hello.Key)
-	}
-	s.Log.Info("session closed", "remote", r.RemoteAddr, "why", why)
+	s.Log.Info("session open", "remote", r.RemoteAddr, "cols", cols, "rows", rows)
+	s.Log.Info("session closed", "remote", r.RemoteAddr, "why", s.pumpFrames(r.Context(), c, sess, hello))
 }
 
 // handshake 验明手机身份，返回它的 hello（行列已经兜过底）
@@ -265,134 +249,6 @@ func (s *Server) handshake(ctx context.Context, c *websocket.Conn) (hello messag
 	}
 	hello.Cols, hello.Rows = max(hello.Cols, 20), max(hello.Rows, 5)
 	return hello, nil
-}
-
-// pump 两头对拷，直到一边结束；另起一个心跳，及早发现手机那头已经没了的连接
-// 返回结束的原因，记进日志
-func (s *Server) pump(ctx context.Context, c *websocket.Conn, sess *term.Session, key string) string {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	var once sync.Once
-	var why string
-	note := func(reason string) { once.Do(func() { why = reason }) }
-	stop := func(reason string) {
-		note(reason)
-		cancel()
-	}
-
-	// 终端输出先进缓冲区，读终端的一侧从不等网络：手机那头慢了，herdr 也不会被卡住
-	// （它发现客户端收不动会把客户端踢掉）。写网络的一侧每次把攒下的合成一帧发出去。
-	var (
-		mu      sync.Mutex
-		pending []byte
-		ended   bool
-		wake    = make(chan struct{}, 1)
-	)
-	signal := func() {
-		select {
-		case wake <- struct{}{}:
-		default:
-		}
-	}
-
-	go func() {
-		buf := make([]byte, 32*1024)
-		for {
-			n, err := sess.Read(buf)
-			mu.Lock()
-			pending = append(pending, buf[:n]...)
-			over := len(pending) > maxPending
-			if err != nil {
-				ended = true
-			}
-			mu.Unlock()
-			signal()
-			if over {
-				// 积压太多：断开，让手机重连；重连后 herdr 会重画一整屏，比慢慢追上快
-				note(fmt.Sprintf("client too slow: %d bytes pending", maxPending))
-				c.Close(CloseTooSlow, "client too slow")
-				cancel()
-				return
-			}
-			if err != nil {
-				return
-			}
-		}
-	}()
-
-	go func() {
-		defer stop("output closed")
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-wake:
-			}
-			mu.Lock()
-			out, done := pending, ended
-			pending = nil
-			mu.Unlock()
-			for len(out) > 0 {
-				n := min(len(out), maxFrame)
-				if err := c.Write(ctx, websocket.MessageBinary, append([]byte{0}, out[:n]...)); err != nil {
-					stop("write: " + err.Error())
-					return
-				}
-				out = out[n:]
-			}
-			if done {
-				<-sess.Done()
-				code := sess.ExitCode()
-				note(fmt.Sprintf("command exited with code %d", code))
-				wsjson.Write(ctx, c, message{Type: "exit", Code: &code})
-				c.Close(websocket.StatusNormalClosure, "exit")
-				return
-			}
-		}
-	}()
-
-	go func() {
-		t := time.NewTicker(25 * time.Second)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				pctx, pcancel := context.WithTimeout(ctx, 10*time.Second)
-				err := c.Ping(pctx)
-				pcancel()
-				if err != nil {
-					stop("ping: " + err.Error())
-					return
-				}
-			}
-		}
-	}()
-
-	for {
-		typ, data, err := c.Read(ctx)
-		if err != nil {
-			stop("read: " + err.Error())
-			return why
-		}
-		if typ != websocket.MessageBinary || len(data) == 0 {
-			continue
-		}
-		switch data[0] {
-		case 0:
-			sess.Write(data[1:])
-		case 1:
-			var sz struct{ Cols, Rows uint16 }
-			if json.Unmarshal(data[1:], &sz) == nil && sz.Cols > 0 && sz.Rows > 0 {
-				sess.Resize(sz.Cols, sz.Rows)
-			}
-		case msgUpload:
-			s.upload(ctx, c, data)
-		case msgRequest:
-			s.answer(ctx, c, key, data)
-		}
-	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
