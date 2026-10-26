@@ -22,7 +22,7 @@ var herdrMethods = map[string]bool{
 	"tab.focus":       true,
 	"tab.create":      true,
 	"workspace.focus": true,
-	"agent.focus":     true, // 切到这个 agent 所在的 tab，herdr 顺带把「干完了」标成看过
+	"pane.focus":      true, // 切到这个窗格（agent 所在的），herdr 顺带把「干完了」标成看过
 	"pane.zoom":       true,
 }
 

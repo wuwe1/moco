@@ -29,7 +29,7 @@ export function App() {
 	}
 	const jump = (h: Host, pane: string) => {
 		open(h)
-		herdrOf(h.id)?.call('agent.focus', { target: pane }).catch(e => dlog(`切到 ${pane} 没成：${e.message}`))
+		herdrOf(h.id)?.call('pane.focus', { pane_id: pane }).catch(e => dlog(`切到 ${pane} 没成：${e.message}`))
 	}
 	// 点通知进来：冷启动带 ?host=&pane=，已经开着就由 Service Worker 发消息（public/sw.js）
 	const fromNotification = useRef({ open, jump })

@@ -18,10 +18,11 @@ export function HerdrPanel(props: { hostId: string; open: boolean; onOpenChange:
 			?.call(method, params)
 			.catch(e => props.onError(`herdr 没切过去：${e.message}`))
 	}
-	// 有 agent 的 tab 切到最要紧的那个 agent：herdr 顺带把「干完了」标成看过
+	// 有 agent 的 tab 切到最要紧的那个 agent 的窗格：herdr 顺带把「干完了」标成看过。
+	// 用 pane.focus 不用 agent.focus：herdr 只在 workspace/tab/pane.focus 之后让连着的客户端跟过去，agent.focus 只改它自己记的焦点
 	const go = (st: HerdrState, t: Tab) => {
 		const a = byUrgency(agentsIn(st, t.id))[0]
-		if (a) call('agent.focus', { target: a.pane })
+		if (a) call('pane.focus', { pane_id: a.pane })
 		else call('tab.focus', { tab_id: t.id })
 	}
 

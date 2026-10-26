@@ -608,7 +608,7 @@ try {
 
 		await open()
 		await page.click('.herdr-panel [data-tab="w2:t1"]')
-		if ((await lastHerdrCall('agent.focus', '跳到有 agent 的 tab')).target !== 'w2:p1') throw new Error('跳错了')
+		if ((await lastHerdrCall('pane.focus', '跳到有 agent 的 tab')).pane_id !== 'w2:p1') throw new Error('跳错了')
 		await until(async () => !(await page.locator('.herdr-panel').count()), '面板收起')
 	})
 	await check('首页卡片：agent 状态，点一个直接切过去', async () => {
@@ -619,7 +619,7 @@ try {
 		await shot('home-agents')
 		await page.click('.host .agents button:has-text("reviewer")')
 		await until(() => page.evaluate(() => !!document.querySelector('#sheet.open')), '打开终端')
-		if ((await lastHerdrCall('agent.focus', '切到 reviewer')).target !== 'w1:p3') throw new Error('切错了')
+		if ((await lastHerdrCall('pane.focus', '切到 reviewer')).pane_id !== 'w1:p3') throw new Error('切错了')
 	})
 	await check('点通知进来：打开那台电脑、切到那个 agent', async () => {
 		await closeSheet()
@@ -627,8 +627,8 @@ try {
 		const n = herdrCalls.length
 		await page.goto(`${base}/?host=${id}&pane=w2:p1`)
 		await until(() => page.evaluate(() => !!document.querySelector('#sheet.open')), '打开终端')
-		await until(() => herdrCalls.length > n, 'agent.focus')
-		if ((await lastHerdrCall('agent.focus', 'agent.focus')).target !== 'w2:p1') throw new Error('切错了')
+		await until(() => herdrCalls.length > n, 'pane.focus')
+		if ((await lastHerdrCall('pane.focus', 'pane.focus')).pane_id !== 'w2:p1') throw new Error('切错了')
 		if (page.url().includes('host=')) throw new Error('地址栏里的参数没去掉')
 	})
 	await check('设置页：打开通知，订阅交给 mocod；发一条试试；关掉', async () => {
